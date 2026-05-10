@@ -3,7 +3,16 @@
 **Status:** ✅ approved 2026-05-07 — execution lands as Phase 3.6 after Phase 3.4 closes
 **Owner:** project owner
 **Sources:** systemd.exec(5), systemd-analyze security, Anthropic Claude Code IAM docs, hardening guides
-**See also:** [docs/architecture.md §11](../../docs/architecture.md), [phase-3-tasks/3.6-security.md](../phases/phase-3-tasks/3.6-security.md)
+**See also:** [docs/architecture.md §11](../../docs/architecture.md), [phase-3-tasks/3.6-security.md](../phases/phase-3-tasks/3.6-security.md), [ADR 0006 — Multi-client isolation](../decisions/0006-multi-client-isolation.md)
+
+> **Significant update 2026-05-07:** the original Tier-2 plan
+> (`ProtectHome=read-only + ReadWritePaths=...`) was found
+> insufficient for multi-client deployments — same Linux user
+> means same filesystem ownership, so Client A's bot could `cat`
+> Client B's secrets via reads. [ADR 0006](../decisions/0006-multi-client-isolation.md)
+> supersedes that approach with mount-namespace isolation
+> (`ProtectHome=tmpfs + BindPaths`) and flat per-instance layout
+> (`~/.claudify-<name>/`). 3.6.2 spec updated to match.
 
 This document captures (a) the threat model Claudify defends against,
 (b) what we have today, (c) the gaps, and (d) the concrete plan to
@@ -26,9 +35,10 @@ via Telegram.
 | 1 | **Prompt injection** via Telegram from an allowlisted user (account theft, social engineering, or just a confusing forwarded message) | Medium | High — bot has `bypassPermissions`, can run shell, edit files | Critical |
 | 2 | **Malicious or buggy skill / MCP / plugin** writes outside its data dir, leaks secrets, or runs destructive ops | Medium (when skill ecosystem grows) | High | Critical |
 | 3 | **Bot token / OAuth token leak** via process listing, logs, or filesystem permission gap | Low | High — full account takeover | Important |
-| 4 | **Local user on the same machine reading the bot's data** | Very low (single-user server) | Medium | Defense-in-depth |
-| 5 | **Random Telegram users spamming the bot** | Low (we have allowlist) | DoS only | Already handled |
-| 6 | **Local privilege escalation from bot process to root** | Very low (user-mode service, no SUID) | Total | Defense-in-depth |
+| 4 | **Cross-instance data leak** in multi-client deployments (Client A's bot reading Client B's secrets/conversations/persona) | Medium (when multi-client lands) | High — full client compromise | **Critical** |
+| 5 | **Local user on the same machine reading the bot's data** | Very low (single-user server) | Medium | Defense-in-depth |
+| 6 | **Random Telegram users spamming the bot** | Low (we have allowlist) | DoS only | Already handled |
+| 7 | **Local privilege escalation from bot process to root** | Very low (user-mode service, no SUID) | Total | Defense-in-depth |
 
 ### What we do NOT defend against
 
@@ -152,30 +162,42 @@ LimitNPROC=200
 
 **Lands as:** [3.6.1](../phases/phase-3-tasks/3.6.1-tier1-hardening.md). ~30 min.
 
-#### 2. Tier-2 filesystem write-restriction
+#### 2. Tier-2 filesystem isolation (mount namespace)
+
+> **Updated 2026-05-07** per [ADR 0006](../decisions/0006-multi-client-isolation.md).
+> Original plan (`ProtectHome=read-only + ReadWritePaths=...`)
+> restricted writes only — reads of other instances' folders still
+> succeeded because all instances run as the same Linux user.
+> Replaced with mount-namespace isolation.
 
 ```ini
-ProtectHome=read-only
-ReadWritePaths=%h/.claudify %h/.claude %h/.npm-global %h/.bun
+ProtectHome=tmpfs
+BindPaths=%h/.claudify-<name>
+BindReadOnlyPaths=%h/.npm-global %h/.bun
+Environment=CLAUDE_CONFIG_DIR=%h/.claudify-<name>/claude
 ```
 
-Bot can read $HOME but can only **write** to those four explicit
-paths. Stops `rm -rf ~/.ssh` cold; stops a skill from `>>` -ing into
-`~/.bashrc`.
+Each unit gets a **private mount namespace** where `$HOME` is an
+empty tmpfs and only the bound paths are visible. Other instances'
+folders, `~/.ssh`, `~/.bashrc`, and the rest of `$HOME` literally
+don't exist in the bot's filesystem view.
 
-**Risk:** any path the bot legitimately needs to write that isn't
-on the list will silently fail. Needs careful review of:
-- `~/.claudify` ✓ (state)
-- `~/.claude/` ✓ (Claude Code settings)
-- `~/.npm-global/` ✓ (claude binary)
-- `~/.bun/` ✓ (Bun runtime)
-- `~/.bashrc` — we currently `>>` PATH lines into this. Either add
-  to the list or move the PATH wiring elsewhere (preferred:
-  `~/.profile` or a one-shot drop-in).
+This is **kernel-enforced isolation**, not policy-enforced. A
+prompt-injected `find ~ -name '*.env' -exec cat {} \;` returns
+nothing useful — those paths aren't there.
 
-This is the **single biggest security win** in the whole plan.
+Per-instance `CLAUDE_CONFIG_DIR` ensures Claude Code's own state
+(settings.json, plugins cache, project trust) is also per-instance,
+not user-wide.
 
-**Lands as:** [3.6.2](../phases/phase-3-tasks/3.6.2-fs-write-restriction.md). ~45 min.
+**Why this is the single biggest security win:**
+- Stops `rm -rf ~/.ssh` cold (path doesn't exist in namespace)
+- Stops `cat ~/.claudify-other-client/credentials.env` (path doesn't
+  exist in namespace)
+- Stops every read-based exfiltration attack across instances
+- Costs the same effort as the weaker original plan
+
+**Lands as:** [3.6.2](../phases/phase-3-tasks/3.6.2-fs-write-restriction.md). ~45 min. Authority: ADR 0006.
 
 #### 3. Tier-3 address families + syscall filter
 
