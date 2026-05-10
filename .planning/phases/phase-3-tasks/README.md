@@ -23,7 +23,8 @@ verify done.
 | 3.4.5.2 | [Engine contract: memory_setup + apply_persona](3.4.5.2-engine-memory-contract.md) | ⏳ pending | ~30 min | 3.4.3 | Phase 4 (memory) |
 | 3.4.6 | [Personal command wrapper](3.4.6-personal-cmd.md) | ⏳ pending | ~45 min | 3.4.5 | 3.4.8 |
 | 3.4.7 | [Migration logic](3.4.7-migration.md) | ⏳ pending | ~30 min | 3.4.5 | 3.4.8 |
-| 3.4.8 | [Docs sync after refactor](3.4.8-docs-sync.md) | ⏳ pending | ~30 min | 3.4.6, 3.4.7 | 3.5 |
+| 3.4.8 | [Docs sync after refactor](3.4.8-docs-sync.md) | ⏳ pending | ~30 min | 3.4.6, 3.4.7 | 3.4.9 |
+| 3.4.9 | [Containerize Claudify (dual delivery)](3.4.9-containerize.md) | ⏳ pending | ~7 hr | 3.4.5, 3.4.8 | Phase 5 (codaki.com) |
 | 3.5 | [backup.sh + restore.sh (TS)](3.5-backup-restore.md) | ⏳ pending | ~3-4 hrs | 3.4.8 | 3.6 |
 | 3.6 | [Security hardening pass — umbrella](3.6-security.md) | ⏳ pending | ~2.75 hrs | 3.5 | — |
 | 3.6.1 | [Tier-1 hardening (always-safe)](3.6.1-tier1-hardening.md) | ⏳ pending | ~30 min | 3.5 | 3.6.2 |

@@ -171,6 +171,39 @@ model and the codebase is in long-term shape.
 - [ ] All bash files under 300 lines; no function over 50 lines
 - [ ] `bash test.sh` runs both bash + TS canary tests, both pass
 
+### 3.4.9 — Containerize Claudify (~7 hrs)
+
+**Goal:** add a Docker / Podman delivery shape alongside the curl-bash
+install. Same codebase, two delivery paths. Solo users keep their
+familiar `curl … | bash`; codaki.com (and anyone hosting multi-tenant)
+gets containers with kernel-enforced isolation.
+
+**Why now:** the mount-namespace approach from
+[ADR 0006](../decisions/0006-multi-client-isolation.md) was confirmed
+broken on Ubuntu 24.04 (AppArmor blocks unprivileged userns
+mount operations). Containers are the production answer for multi-
+tenant. Building the image now means codaki.com (separate project)
+can drop straight into the container shape when it kicks off.
+
+**Scope:**
+- `Dockerfile`, `lib/boot.sh` (container entrypoint), `compose.yaml`,
+  `test-container.sh`, `.dockerignore`
+- `lib/layout.sh` gains a `CLAUDIFY_CONTAINERIZED=1` mode (paths
+  resolve to `/state`)
+- `install.sh` skips systemd-related steps in container mode
+- `docs/install-container.md` operator-facing docs
+- README adds an "Install via Docker" section
+
+**Acceptance:**
+- [ ] `docker build` succeeds; image ≤ 500 MB
+- [ ] `docker compose up` runs a working bot with real Telegram creds
+- [ ] `bash test-container.sh` smoke-test green (no network, fake creds)
+- [ ] State survives container restart; `down -v` resets it
+- [ ] Solo install still works on Station11 (no regression)
+
+See [phase-3-tasks/3.4.9-containerize.md](phase-3-tasks/3.4.9-containerize.md)
+for full spec.
+
 ### 3.5 — `backup.sh` + `restore.sh` (TypeScript via Bun, ~3–4 hrs)
 
 **Goal:** serialize one or more instances' state into a tarball that

@@ -1,10 +1,11 @@
-# ADR 0006: Multi-client isolation via mount namespace + flat layout
+# ADR 0006: Multi-client isolation — flat layout (kept) + mount namespace (failed, replaced by containers)
 
-**Status:** Accepted
-**Date:** 2026-05-07
+**Status:** Partially accepted, partially superseded — see appendix 2026-05-10
+**Date:** 2026-05-07 (original); appendix 2026-05-10
 **Supersedes:** Aspects of `docs/architecture.md §3b` (the nested
 `~/.claudify/instances/<name>/` layout) and 3.6.2's original
 `ProtectHome=read-only + ReadWritePaths` plan.
+**Partially superseded by:** [3.4.9 Containerize Claudify](../phases/phase-3-tasks/3.4.9-containerize.md) (containers replace mount-namespace approach for actual isolation).
 
 ## Context
 
@@ -229,6 +230,102 @@ is broken and the install must refuse to start.
 
 - [Phase 3.4.5 — Multi-instance layout](../phases/phase-3-tasks/3.4.5-multi-instance.md) (the post-research delta section is the operational manifestation of this ADR)
 - [Phase 3.6.2 — Filesystem write-restriction](../phases/phase-3-tasks/3.6.2-fs-write-restriction.md) (updated to use the BindPaths approach)
+- [Phase 3.4.9 — Containerize Claudify](../phases/phase-3-tasks/3.4.9-containerize.md) (the replacement for mount-namespace isolation)
 - [.planning/research/security.md](../research/security.md) (threat model + decision rationale)
 - [systemd.exec(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) — `BindPaths`, `ProtectHome`, `RestrictAddressFamilies` references
 - Anthropic Claude Code IAM docs — `CLAUDE_CONFIG_DIR` env var
+
+---
+
+## Appendix — 2026-05-10 — Decision 2 failed in practice; replaced by containers
+
+### What we found on Station11
+
+Decision 2 of this ADR specified that each instance's systemd unit
+would gain `ProtectHome=tmpfs + BindPaths + BindReadOnlyPaths` to
+create a private mount namespace per service. We implemented this
+in `lib/service.sh::write_service` and tested on Station11 (Ubuntu
+24.04 LTS, systemd 255).
+
+**Result: directives parse correctly but silently no-op.**
+
+Verification:
+- `systemctl --user show claudify-client-a -p ProtectHome -p BindPaths`
+  reports both as set
+- `/proc/<bot-pid>/ns/mnt` returns the same namespace ID as the
+  operator's shell (`mnt:[4026531841]`)
+- `ls /proc/<bot-pid>/root/home/david/` shows the full host home
+  directory including `~/.ssh`, `~/.bashrc`, and other instances'
+  folders
+- No journalctl warnings or errors
+
+### Root cause
+
+Ubuntu 24.04 ships with `kernel.apparmor_restrict_unprivileged_userns = 1`
+by default. This AppArmor restriction prevents unprivileged user
+namespaces from performing mount operations — which is exactly what
+`ProtectHome=tmpfs` and `BindPaths=` need to do.
+
+systemd silently downgrades when it can't create the namespace:
+the directives are kept in the unit text but no namespace is
+attempted. There's no warning in the journal because, from
+systemd's perspective, the directives were "applied" (i.e., parsed
++ marked).
+
+### What we tried
+
+Adding `PrivateUsers=yes` (which creates a user namespace) and
+`PrivateMounts=yes` (which explicitly requests mount-namespace
+creation) — same result. AppArmor still blocks the mount operations
+inside the user namespace. `kernel.apparmor_restrict_unprivileged_userns=1`
+is the kernel's last word.
+
+The fix would require `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`
+on every host running Claudify — a system-wide setting that
+weakens AppArmor for everything else on that machine. Not a
+trade-off we're willing to make.
+
+### Decision 2 status: SUPERSEDED
+
+The mount-namespace approach to multi-client isolation is **dropped**
+from Claudify's bash install path. The replacement:
+
+| Use case | Mechanism | Spec |
+|---|---|---|
+| Solo install, 1-3 bots, operator trusts their skills | Tier-1 systemd hardening (3.6.1) — no kernel writes, resource caps. NO cross-instance isolation. Documented as such. | [3.6.1](../phases/phase-3-tasks/3.6.1-tier1-hardening.md) |
+| Multi-tenant hosted (codaki.com), or solo with strong isolation | Containers (Docker / Podman) — kernel-enforced via the container's own namespace + cgroups. Works on Ubuntu 24.04 because containers don't depend on AppArmor's userns restriction. | [3.4.9](../phases/phase-3-tasks/3.4.9-containerize.md) |
+
+### Decision 1 (flat layout) status: STILL ACCEPTED
+
+The flat layout `~/.claudify-<name>/` (vs the nested
+`~/.claudify/instances/<name>/`) was the right call independently
+of the isolation question. It gives:
+
+- Clearer visual separation per instance for the operator
+- Cleaner uninstall (`rm -rf ~/.claudify-<name>`)
+- Cleaner mapping to a future container's volume (one container =
+  one folder)
+
+Decision 1 stands.
+
+### Decision 3 (explicit names) status: STILL ACCEPTED
+
+`--name <NAME>` is required (default: `default`); no auto-renaming.
+Stands.
+
+### What this means for the codebase
+
+- `lib/service.sh::write_service` — strip `ProtectHome=`, `BindPaths=`, `BindReadOnlyPaths=` directives. (Phase 3.6.2 reduced scope.)
+- `lib/service.sh::write_service` — add Tier-1 hardening directives (3.6.1).
+- ADR 0007 (TBD): record the container model as the official path for multi-tenant isolation. Reference 3.4.9 spec.
+
+### Lessons
+
+1. **Read AppArmor sysctls before designing user-mode sandboxing.**
+   Should have checked `kernel.apparmor_restrict_unprivileged_userns`
+   on the target distro before committing to the architecture.
+2. **systemd "directive accepted" ≠ "directive enforced".** Without
+   a journal warning to flag silent fallbacks, you have to test the
+   actual effect with `/proc/<pid>/ns/*` comparisons.
+3. **Containers were always the cleaner answer for multi-tenant.**
+   We tried to avoid the new dependency; the kernel pushed back.
