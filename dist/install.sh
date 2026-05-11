@@ -4,7 +4,7 @@
 # THIS FILE IS GENERATED. Do not edit directly.
 # Source:  https://github.com/didi6135/Claudify
 # Edit:    install.sh + lib/*.sh in the source repo, then run `bash build.sh`
-# Built:   2026-05-04T13:16:22Z
+# Built:   2026-05-11T06:06:48Z
 #
 # Usage (on a target Linux server):
 #   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
@@ -65,6 +65,84 @@ print_banner() {
   c_bold "╰────────────────────────────────────────────────────────────╯"
 }
 
+# ─── from lib/layout.sh ─────────────────────────────────────────────────
+# lib/layout.sh — Claudify on-disk layout constants (per-instance, flat)
+#
+# Multi-instance, flat layout per ADR 0006:
+#   ~/.claudify-<name>/                  ← one instance, fully self-contained
+#   ~/.claudify-registry.json            ← side-car: list of all instances
+#
+# Each instance's bot runs in a private mount namespace (3.6.2) where
+# only its own ~/.claudify-<name>/ folder is visible. Cross-instance
+# reads/writes are kernel-blocked. CLAUDE_CONFIG_DIR points at the
+# per-instance claude state dir so Claude Code's own settings,
+# plugins, and project-trust files are isolated too.
+#
+# Path constants are computed from $INSTANCE_NAME. parse_args (args.sh)
+# may override INSTANCE_NAME from `--name <NAME>`; the orchestrator
+# (install.sh / update.sh / etc.) calls `claudify_init_layout` AFTER
+# parse_args to pick up that override.
+#
+# Exposes:
+#   INSTANCE_NAME             — default 'default'; --name overrides
+#   CLAUDIFY_INSTANCE_DIR     — ~/.claudify-<name>  (top-level per instance)
+#   CLAUDIFY_WORKSPACE        — <instance>/workspace
+#   CLAUDIFY_TELEGRAM         — <instance>/channels/telegram
+#   CLAUDIFY_MCPS             — <instance>/mcps
+#   CLAUDIFY_SKILLS           — <instance>/skills
+#   CLAUDIFY_HOOKS            — <instance>/hooks
+#   CLAUDIFY_DATA             — <instance>/data
+#   CLAUDIFY_CLAUDE_DIR       — <instance>/claude  (CLAUDE_CONFIG_DIR target)
+#   CREDS_FILE                — <instance>/credentials.env (chmod 600)
+#   CLAUDIFY_REGISTRY         — ~/.claudify-registry.json
+#   claudify_init_layout      — (re-)compute the constants from $INSTANCE_NAME
+
+INSTANCE_NAME="${INSTANCE_NAME:-default}"
+
+claudify_init_layout() {
+  CLAUDIFY_INSTANCE_DIR="$HOME/.claudify-$INSTANCE_NAME"
+  CLAUDIFY_WORKSPACE="$CLAUDIFY_INSTANCE_DIR/workspace"
+  CLAUDIFY_TELEGRAM="$CLAUDIFY_INSTANCE_DIR/channels/telegram"
+  CLAUDIFY_MCPS="$CLAUDIFY_INSTANCE_DIR/mcps"
+  CLAUDIFY_SKILLS="$CLAUDIFY_INSTANCE_DIR/skills"
+  CLAUDIFY_HOOKS="$CLAUDIFY_INSTANCE_DIR/hooks"
+  CLAUDIFY_DATA="$CLAUDIFY_INSTANCE_DIR/data"
+  CLAUDIFY_CLAUDE_DIR="$CLAUDIFY_INSTANCE_DIR/claude"
+  CREDS_FILE="$CLAUDIFY_INSTANCE_DIR/credentials.env"
+  CLAUDIFY_REGISTRY="$HOME/.claudify-registry.json"
+}
+
+# Initial pass with the default name. main() re-calls claudify_init_layout
+# after parse_args has run, so a --name override is reflected.
+claudify_init_layout
+
+# ─── from lib/validate.sh ─────────────────────────────────────────────────
+# lib/validate.sh — input format validators
+#
+# Pure functions: take a string, return 0 if valid, non-zero otherwise.
+# No I/O, no side effects. Used by the *_validated prompt helpers.
+
+validate_bot_token() { [[ "$1" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; }
+validate_user_id()   { [[ "$1" =~ ^[0-9]+$ ]]; }
+validate_workspace() { [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]; }
+
+# Instance name (3.4.5):
+#   - regex: lowercase letter start, then 1-30 of [a-z0-9_-]; total 2-31 chars
+#   - blocklist: common Unix command names + reserved words. Avoids accidental
+#     PATH shadowing when 3.4.6 ships `~/.local/bin/<name>` as a personal
+#     command wrapper.
+validate_instance_name() {
+  local name="$1"
+  [[ "$name" =~ ^[a-z][a-z0-9_-]{1,30}$ ]] || return 1
+  case "$name" in
+    ls|cd|cp|mv|rm|cat|grep|find|git|npm|bun|node|claude|claudify) return 1 ;;
+    docker|systemctl|journalctl|sudo|bash|sh|zsh|env|export|set)   return 1 ;;
+    pwd|echo|test|true|false|kill|killall|ssh|scp|curl|wget)       return 1 ;;
+    install|update|uninstall|doctor|backup|restore|build|help)     return 1 ;;
+  esac
+  return 0
+}
+
 # ─── from lib/args.sh ─────────────────────────────────────────────────
 # lib/args.sh — CLI argument parsing, help text, dry-run plumbing
 #
@@ -78,6 +156,7 @@ DRY_RUN=0
 RESET_CONFIG=0
 NON_INTERACTIVE=0
 PRESERVE_STATE=0
+# INSTANCE_NAME is initialised in lib/layout.sh; --name may override.
 
 show_help() {
   cat <<HELP
@@ -87,11 +166,16 @@ Usage:
   bash install.sh [flags]
 
 Flags:
+  --name <NAME>       Instance name (default: 'default'). Lowercase letters,
+                      digits, _, -. 2-31 chars. Each instance lives at
+                      ~/.claudify-<NAME>/ and runs as
+                      claudify-<NAME>.service. Multiple instances coexist
+                      side-by-side, isolated by systemd mount namespaces.
   --dry-run           Print actions without modifying the system
   --reset-config      Overwrite existing token/allowlist (default: preserve)
   --preserve-state    Update mode: reuse existing BOT_TOKEN, TG_USER_ID,
-                      OAuth token from ~/.claudify; only refresh the
-                      systemd unit + reseed claude.json. No prompts.
+                      OAuth token from ~/.claudify-<name>; only refresh
+                      the systemd unit + reseed claude state. No prompts.
                       Typically invoked by update.sh.
   --non-interactive   Skip all "Press ENTER" pauses and confirmation
                       prompts. Useful for automated tests / CI. Requires
@@ -103,7 +187,7 @@ Flags:
 Environment (any can be set to skip its prompt):
   BOT_TOKEN         Telegram bot token from @BotFather
   TG_USER_ID        Your numeric Telegram user ID from @userinfobot
-  WORKSPACE         Workspace folder name (default: claude-bot)
+  INSTANCE_NAME     Instance name (same effect as --name)
 
 Logs:
   $LOG_FILE
@@ -113,6 +197,17 @@ HELP
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --name)
+        if [[ $# -lt 2 ]]; then
+          fail "--name requires a value (e.g. --name client-a)"
+        fi
+        if ! validate_instance_name "$2"; then
+          fail "invalid instance name '$2' — must match ^[a-z][a-z0-9_-]{1,30}\$ and not collide with common commands (ls, rm, git, claude, etc.)"
+        fi
+        INSTANCE_NAME="$2"
+        export INSTANCE_NAME
+        shift
+        ;;
       --dry-run)         DRY_RUN=1 ;;
       --reset-config)    RESET_CONFIG=1 ;;
       --preserve-state)  PRESERVE_STATE=1; NON_INTERACTIVE=1 ;;  # implies non-interactive
@@ -123,6 +218,9 @@ parse_args() {
     esac
     shift
   done
+
+  # Re-resolve layout paths now that INSTANCE_NAME may have changed.
+  claudify_init_layout
 
   # --reset-config means "start clean" — wipe the resume crumbs too,
   # otherwise we'd silently re-load a stale BOT_TOKEN the operator
@@ -252,16 +350,6 @@ wait_enter() {
   local _input
   read -r -p "  $prompt: " _input < "$TTY_DEV" || true
 }
-
-# ─── from lib/validate.sh ─────────────────────────────────────────────────
-# lib/validate.sh — input format validators
-#
-# Pure functions: take a string, return 0 if valid, non-zero otherwise.
-# No I/O, no side effects. Used by the *_validated prompt helpers.
-
-validate_bot_token() { [[ "$1" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; }
-validate_user_id()   { [[ "$1" =~ ^[0-9]+$ ]]; }
-validate_workspace() { [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]; }
 
 # ─── from lib/preflight.sh ─────────────────────────────────────────────────
 # lib/preflight.sh — checks run before any install action
@@ -425,34 +513,6 @@ preflight_linger() {
   ok "linger enabled"
 }
 
-# ─── from lib/layout.sh ─────────────────────────────────────────────────
-# lib/layout.sh — Claudify on-disk layout constants
-#
-# Everything Claudify owns lives under a single root so uninstall is
-# `rm -rf $CLAUDIFY_ROOT`. Each engine's user-wide state (~/.claude,
-# ~/.claude.json for Claude Code) stays where it is — it belongs to
-# the engine, not Claudify.
-#
-# These paths are layout-specific, not engine-specific — they don't
-# change when a different engine adapter is in use. Engine-specific
-# paths (like NPM_PREFIX for engines that npm-install) live in the
-# engine adapter under lib/engines/.
-#
-# 3.4.5 (multi-instance) will introduce
-# `~/.claudify/instances/<name>/...` nesting; this file becomes the
-# single source of truth for the new paths.
-#
-# Exposes:
-#   CLAUDIFY_ROOT       — ~/.claudify (top-level Claudify dir)
-#   CLAUDIFY_WORKSPACE  — ~/.claudify/workspace (engine WorkingDirectory)
-#   CLAUDIFY_TELEGRAM   — ~/.claudify/telegram (channel state dir)
-#   CREDS_FILE          — ~/.claudify/credentials.env (chmod 600 OAuth)
-
-CLAUDIFY_ROOT="$HOME/.claudify"
-CLAUDIFY_WORKSPACE="$CLAUDIFY_ROOT/workspace"
-CLAUDIFY_TELEGRAM="$CLAUDIFY_ROOT/telegram"
-CREDS_FILE="$CLAUDIFY_ROOT/credentials.env"
-
 # ─── from lib/engines/claude-code.sh ─────────────────────────────────────────────────
 # lib/engines/claude-code.sh — Claude Code engine adapter
 #
@@ -525,8 +585,9 @@ _npm_prefix_setup() {
 #   projects[<abs-path>].hasTrustDialogAccepted     (per-workspace)
 #   projects[<abs-path>].hasCompletedProjectOnboarding
 _seed_claude_json() {
-  local config="$HOME/.claude.json"
+  local config="$CLAUDIFY_CLAUDE_DIR/.claude.json"
   local wsdir="$1"
+  mkdir -p "$CLAUDIFY_CLAUDE_DIR"
   local existing='{}'
   [[ -s "$config" ]] && existing=$(cat "$config")
 
@@ -541,13 +602,13 @@ _seed_claude_json() {
       })
   ' > "$config.tmp" && mv "$config.tmp" "$config"
 
-  ok "seeded ~/.claude.json (onboarding + trust for $wsdir)"
+  ok "seeded $config (onboarding + trust for $wsdir)"
 }
 
 # Auto-allow the telegram plugin's tools so the bot doesn't prompt the
 # operator (via Telegram!) to approve every reply/react/edit.
 _seed_settings_json() {
-  local settings="$HOME/.claude/settings.json"
+  local settings="$CLAUDIFY_CLAUDE_DIR/settings.json"
   mkdir -p "$(dirname "$settings")"
   local existing='{}'
   [[ -s "$settings" ]] && existing=$(cat "$settings")
@@ -564,7 +625,7 @@ _seed_settings_json() {
       )
   ' > "$settings.tmp" && mv "$settings.tmp" "$settings"
 
-  ok "auto-allowed telegram plugin tools in ~/.claude/settings.json"
+  ok "auto-allowed telegram plugin tools in $settings"
 }
 
 # Run `claude setup-token` in a real PTY (`script(1)`) so its TUI
@@ -639,13 +700,13 @@ engine_seed_state() {
   mkdir -p "$wsdir"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "  [DRY] merge hasCompletedOnboarding + trust($wsdir) into ~/.claude.json"
-    echo "  [DRY] merge permissions.allow for telegram plugin tools into ~/.claude/settings.json"
+    echo "  [DRY] merge hasCompletedOnboarding + trust($wsdir) into $CLAUDIFY_CLAUDE_DIR/.claude.json"
+    echo "  [DRY] merge permissions.allow for telegram plugin tools into $CLAUDIFY_CLAUDE_DIR/settings.json"
     return 0
   fi
 
   if ! command -v jq >/dev/null 2>&1; then
-    fail "jq is required for seeding ~/.claude.json but was not found"
+    fail "jq is required for seeding the Claude state but was not found"
   fi
 
   _seed_claude_json "$wsdir"
@@ -790,21 +851,19 @@ fi
 # lib/manifest.sh — registry + per-instance manifest read/write helpers
 #
 # Two JSON files are the single source of truth for "what's installed":
-#   ~/.claudify/instances.json   — top-level registry of all instances
-#   ~/.claudify/<per-instance>   — per-instance manifest
+#   ~/.claudify-registry.json    — side-car registry of all instances
+#   ~/.claudify-<name>/claudify.json   — per-instance manifest
 #
-# Today (pre-3.4.5) "per-instance" lives at the root of $CLAUDIFY_ROOT
-# because there's only one instance. 3.4.5 will move it under
-# `instances/<name>/claudify.json` as part of the multi-instance
-# layout migration. Path resolution is centralised in
-# `_instance_manifest_path` so 3.4.5 is a one-line update.
+# Per ADR 0006: flat layout, side-car registry. Each instance is fully
+# self-contained at its top-level dir; the registry is a separate file
+# at $HOME root that any install can read/write to enumerate / update.
 #
 # All writes go through `manifest_atomic_write`: write `.tmp` then mv.
 # mv is atomic on POSIX, so a Ctrl-C or power loss never leaves a
 # half-written manifest. The worst case is "the .tmp lingers", which
 # is harmless on the next run.
 #
-# Layout constant CLAUDIFY_ROOT comes from lib/layout.sh.
+# Layout constants (CLAUDIFY_REGISTRY) come from lib/layout.sh.
 # Engine ID (CLAUDIFY_ENGINE) comes from lib/engine.sh.
 # SCRIPT_VERSION comes from install.sh.
 #
@@ -823,18 +882,12 @@ fi
 MANIFEST_VERSION=1
 
 _registry_path() {
-  printf '%s/instances.json' "$CLAUDIFY_ROOT"
+  printf '%s/.claudify-registry.json' "$HOME"
 }
 
 _instance_manifest_path() {
   local name="${1:-default}"
-  # TODO(3.4.5): once multi-instance layout lands, this becomes
-  #   printf '%s/instances/%s/claudify.json' "$CLAUDIFY_ROOT" "$name"
-  if [[ "$name" == "default" ]]; then
-    printf '%s/claudify.json' "$CLAUDIFY_ROOT"
-  else
-    printf '%s/claudify-%s.json' "$CLAUDIFY_ROOT" "$name"
-  fi
+  printf '%s/.claudify-%s/claudify.json' "$HOME" "$name"
 }
 
 # Atomic file write. $1 = target path, $2 = new contents (a string).
@@ -861,8 +914,7 @@ manifest_init_registry() {
 manifest_register_instance() {
   local name="${1:-default}"
   local engine="${CLAUDIFY_ENGINE:-claude-code}"
-  # Service name today is hardcoded; 3.4.5 introduces claudify-<name>.
-  local service_unit="claude-telegram"
+  local service_unit="claudify-${name}"
   local now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -1013,24 +1065,26 @@ manifest_read_field() {
 #
 # The user-facing first half of the install: explains what's about to
 # happen, walks the operator through creating a Telegram bot if they
-# don't have one, and collects BOT_TOKEN / TG_USER_ID / WORKSPACE.
+# don't have one, and collects BOT_TOKEN + TG_USER_ID. (Per 3.4.5,
+# WORKSPACE is no longer a separate prompt — the instance name IS the
+# workspace identifier.)
 #
 # Constants `CLAUDIFY_TELEGRAM` etc. are defined in lib/layout.sh and
 # referenced here at call time (not source time), so source order
 # between the two doesn't matter for correctness.
 #
 # Resume-from-Ctrl-C: as soon as the user finishes pasting inputs in
-# `_collect_inputs_fresh`, we drop them in `~/.claudify/.install-partial`
-# (chmod 600). On any re-run, `_load_partial_state` silently sources
-# that file before prompting, so an interrupted install picks up
-# without re-pasting. The file is removed on successful finish (in
-# `final_summary`) and on `--reset-config`.
+# `_collect_inputs_fresh`, we drop them in
+# `~/.claudify-<name>/.install-partial` (chmod 600). On any re-run,
+# `_load_partial_state` asks whether to resume; sourcing that file
+# fills in BOT_TOKEN / TG_USER_ID without re-pasting. The file is
+# removed on successful finish (final_summary) and on --reset-config.
 #
 # Exposes:
 #   intro                 — welcome message, ENTER to continue
 #   guide_botfather       — printed walkthrough for creating a Telegram bot
 #   guide_userinfobot     — printed walkthrough for finding a Telegram user ID
-#   collect_inputs        — prompts (or reuses, in --preserve-state) the 3 inputs
+#   collect_inputs        — prompts (or reuses, in --preserve-state) the 2 inputs
 #   PARTIAL_STATE_FILE    — path of the resume file (consumed by service.sh
 #                           on success and by args.sh on --reset-config)
 
@@ -1090,13 +1144,13 @@ guide_userinfobot() {
 }
 
 # ─── Resume-from-Ctrl-C state ────────────────────────────────────────────
-# The file lives at the well-known path under $CLAUDIFY_ROOT (defined
-# in lib/layout.sh; resolved at call time). Holds the bot token, so
-# chmod 600 from the moment it exists.
+# The file lives under the per-instance dir (resolved at call time
+# via $CLAUDIFY_INSTANCE_DIR from lib/layout.sh). Holds the bot
+# token, so chmod 600 from the moment it exists.
 PARTIAL_STATE_FILE_NAME=".install-partial"
 
 _partial_state_path() {
-  printf '%s/%s' "$CLAUDIFY_ROOT" "$PARTIAL_STATE_FILE_NAME"
+  printf '%s/%s' "$CLAUDIFY_INSTANCE_DIR" "$PARTIAL_STATE_FILE_NAME"
 }
 
 # Write whatever inputs are currently set to disk so a Ctrl-C from
@@ -1106,17 +1160,15 @@ _partial_state_path() {
 # what they did paste survives.
 #
 # Only writes lines for set-and-non-empty vars, so the file's content
-# tracks "what's actually known so far" rather than mixing real values
-# with empty placeholders.
+# tracks "what's actually known so far".
 _write_partial_state() {
   local f
   f="$(_partial_state_path)"
-  mkdir -p "$CLAUDIFY_ROOT"
+  mkdir -p "$CLAUDIFY_INSTANCE_DIR"
   umask 077
   {
     [[ -n "${BOT_TOKEN:-}"  ]] && printf 'BOT_TOKEN=%s\n'  "$BOT_TOKEN"
     [[ -n "${TG_USER_ID:-}" ]] && printf 'TG_USER_ID=%s\n' "$TG_USER_ID"
-    [[ -n "${WORKSPACE:-}"  ]] && printf 'WORKSPACE=%s\n'  "$WORKSPACE"
   } > "$f"
   chmod 600 "$f"
 }
@@ -1153,7 +1205,6 @@ _load_partial_state() {
     case "$key" in
       BOT_TOKEN)  echo "    • Telegram bot token (saved)" ;;
       TG_USER_ID) echo "    • Telegram user ID (saved)"   ;;
-      WORKSPACE)  echo "    • Workspace name (saved)"     ;;
     esac
   done < "$f"
   echo
@@ -1170,21 +1221,18 @@ _load_partial_state() {
   # win. We just fill in what's still empty.
   local pre_bot="${BOT_TOKEN:-}"
   local pre_uid="${TG_USER_ID:-}"
-  local pre_ws="${WORKSPACE:-}"
 
   # shellcheck disable=SC1090
   set -a; . "$f"; set +a
 
   [[ -n "$pre_bot" ]] && BOT_TOKEN="$pre_bot"
   [[ -n "$pre_uid" ]] && TG_USER_ID="$pre_uid"
-  [[ -n "$pre_ws"  ]] && WORKSPACE="$pre_ws"
 
   # Build a human-readable list of what was actually resumed (only
   # what came from the file, not what was already in env).
   local resumed=""
   [[ -z "$pre_bot" && -n "${BOT_TOKEN:-}"  ]] && resumed+="BOT_TOKEN "
   [[ -z "$pre_uid" && -n "${TG_USER_ID:-}" ]] && resumed+="TG_USER_ID "
-  [[ -z "$pre_ws"  && -n "${WORKSPACE:-}"  ]] && resumed+="WORKSPACE "
 
   if [[ -z "$resumed" ]]; then
     return 1
@@ -1192,10 +1240,10 @@ _load_partial_state() {
 
   ok "resumed: ${resumed% }"
 
-  # Short-circuit only if all three are populated; otherwise fall
+  # Short-circuit only if both inputs are populated; otherwise fall
   # through so _collect_inputs_fresh prompts for whatever's still
   # missing.
-  if [[ -n "${BOT_TOKEN:-}" && -n "${TG_USER_ID:-}" && -n "${WORKSPACE:-}" ]]; then
+  if [[ -n "${BOT_TOKEN:-}" && -n "${TG_USER_ID:-}" ]]; then
     return 0
   fi
   return 1
@@ -1209,8 +1257,9 @@ clear_partial_state() {
 
 # ─── Inputs ────────────────────────────────────────────────────────────────
 # In --preserve-state mode (update.sh hot path), pull existing values
-# from ~/.claudify so the operator doesn't have to retype them. Fail
-# loudly if --preserve-state is set but no install exists to preserve.
+# from ~/.claudify-<name>/channels/telegram so the operator doesn't have
+# to retype them. Fail loudly if --preserve-state is set but no install
+# exists to preserve.
 _collect_inputs_preserved() {
   if [[ -z "${BOT_TOKEN:-}" && -s "$CLAUDIFY_TELEGRAM/.env" ]]; then
     BOT_TOKEN="$(grep '^TELEGRAM_BOT_TOKEN=' "$CLAUDIFY_TELEGRAM/.env" | cut -d= -f2-)"
@@ -1220,8 +1269,6 @@ _collect_inputs_preserved() {
     TG_USER_ID="$(jq -r '.allowFrom[0] // empty' "$CLAUDIFY_TELEGRAM/access.json" 2>/dev/null || true)"
     export TG_USER_ID
   fi
-  WORKSPACE="${WORKSPACE:-claude-bot}"
-  export WORKSPACE
 
   if [[ -z "${BOT_TOKEN:-}" || -z "${TG_USER_ID:-}" ]]; then
     fail "--preserve-state but no existing config found in $CLAUDIFY_TELEGRAM.
@@ -1229,7 +1276,7 @@ _collect_inputs_preserved() {
   fi
   ok "BOT_TOKEN reused from $CLAUDIFY_TELEGRAM/.env"
   ok "TG_USER_ID reused from $CLAUDIFY_TELEGRAM/access.json ($TG_USER_ID)"
-  ok "WORKSPACE = $WORKSPACE"
+  ok "Instance: $INSTANCE_NAME"
 }
 
 # Fresh install: prompt for whichever inputs aren't pre-filled via env.
@@ -1257,13 +1304,6 @@ _collect_inputs_fresh() {
     "" TG_USER_ID validate_user_id \
     "Must be all digits."
   _write_partial_state
-
-  echo
-  ask_validated \
-    "Workspace folder name" \
-    "claude-bot" WORKSPACE validate_workspace \
-    "Letters, digits, dot, underscore, hyphen only — no spaces."
-  _write_partial_state
 }
 
 collect_inputs() {
@@ -1279,6 +1319,36 @@ collect_inputs() {
   fi
 
   _collect_inputs_fresh
+}
+
+# Bot-token collision check: a Telegram bot token can only be polled
+# by ONE process at a time. If another instance on this host already
+# uses the same token, install must refuse before touching state.
+# Called from install.sh main() AFTER collect_inputs has populated
+# BOT_TOKEN.
+check_bot_token_collision() {
+  [[ -z "${BOT_TOKEN:-}" ]] && return 0
+  shopt -s nullglob
+  local found=()
+  local env_file
+  for env_file in "$HOME"/.claudify-*/channels/telegram/.env; do
+    # Skip the current instance's own file (re-runs / preserve-state).
+    [[ "$env_file" == "$CLAUDIFY_TELEGRAM/.env" ]] && continue
+    if grep -q "^TELEGRAM_BOT_TOKEN=$BOT_TOKEN\$" "$env_file" 2>/dev/null; then
+      # Extract instance name from the path: ~/.claudify-<name>/channels/...
+      local other_instance="${env_file##*/.claudify-}"
+      other_instance="${other_instance%%/*}"
+      found+=("$other_instance")
+    fi
+  done
+  shopt -u nullglob
+
+  if [[ ${#found[@]} -gt 0 ]]; then
+    fail "BOT_TOKEN already in use by instance(s): ${found[*]}.
+     Telegram allows only one polling client per token. Either:
+       - Use a different bot token (create another bot in @BotFather), or
+       - Uninstall the conflicting instance first: bash uninstall.sh --name <name> --yes"
+  fi
 }
 
 # ─── from lib/configs.sh ─────────────────────────────────────────────────
@@ -1488,30 +1558,38 @@ seed_persona() {
 # ─── from lib/service.sh ─────────────────────────────────────────────────
 # lib/service.sh — systemd user unit + service start + final summary
 #
-# Writes the user-mode systemd unit, enables it, restarts it, and
-# verifies it stays up. Also owns the final-summary banner.
+# Per-instance unit name: claudify-<INSTANCE_NAME>.service
+# Per ADR 0006: bot runs in a private mount namespace where only its
+# own ~/.claudify-<name>/ folder is visible. Cross-instance reads
+# kernel-blocked.
 #
 # The ExecStart command line comes from `engine_run_args` (engine
 # adapter — 3.4.3). Today's only adapter is Claude Code, which wraps
 # the run in /usr/bin/script for a real PTY.
 #
-# The unit name is `claude-telegram.service` today. 3.4.5 (multi-
-# instance) renames it to `claudify-<instance>.service` with a
-# migration step. Don't rename here.
-#
-# Constants `CLAUDIFY_WORKSPACE` come from lib/layout.sh.
+# Constants `CLAUDIFY_INSTANCE_DIR`, `CLAUDIFY_WORKSPACE`, etc. come
+# from lib/layout.sh. INSTANCE_NAME comes from lib/layout.sh /
+# args.sh (--name override).
 #
 # Exposes:
 #   write_service    — write + enable user systemd unit (idempotent)
 #   start_service    — restart + verify it stayed up after 3 s
 #   final_summary    — congratulatory output + useful commands
+#   service_unit_name — echoes "claudify-<INSTANCE_NAME>"
+
+service_unit_name() {
+  printf 'claudify-%s' "$INSTANCE_NAME"
+}
 
 # ─── systemd user service ─────────────────────────────────────────────────
 write_service() {
   step "Install systemd service"
 
   local svc_dir="$HOME/.config/systemd/user"
-  local svc_path="$svc_dir/claude-telegram.service"
+  local unit_name
+  unit_name="$(service_unit_name)"
+  local svc_path="$svc_dir/${unit_name}.service"
+
   run "mkdir -p '$svc_dir'"
   run "mkdir -p '$CLAUDIFY_WORKSPACE'"
 
@@ -1525,21 +1603,47 @@ write_service() {
   else
     cat > "$svc_path" <<SVC
 [Unit]
-Description=Claudify — Telegram bot ($WORKSPACE)
+Description=Claudify — Telegram bot ($INSTANCE_NAME)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# All per-bot state lives under ~/.claudify (self-contained; rm -rf to uninstall).
+# All per-instance state lives under ~/.claudify-${INSTANCE_NAME}/.
 # Leading '-' on EnvironmentFile makes it optional so the unit can be
 # written before oauth_setup populates credentials.env.
-EnvironmentFile=-%h/.claudify/credentials.env
+EnvironmentFile=-%h/.claudify-${INSTANCE_NAME}/credentials.env
 Environment=PATH=%h/.bun/bin:%h/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=HOME=%h
 Environment=TERM=xterm-256color
-Environment=TELEGRAM_STATE_DIR=%h/.claudify/telegram
-WorkingDirectory=%h/.claudify/workspace
+Environment=TELEGRAM_STATE_DIR=%h/.claudify-${INSTANCE_NAME}/channels/telegram
+Environment=CLAUDIFY_INSTANCE_NAME=${INSTANCE_NAME}
+Environment=CLAUDIFY_INSTANCE_DIR=%h/.claudify-${INSTANCE_NAME}
+Environment=CLAUDE_CONFIG_DIR=%h/.claudify-${INSTANCE_NAME}/claude
+WorkingDirectory=%h/.claudify-${INSTANCE_NAME}/workspace
+
+# === Tier-1 hardening (3.6.1) ===
+# Only the directives that work in user-mode systemd on Ubuntu 24.04
+# (verified on Station11 2026-05-10). They protect the host from a
+# misbehaving bot (kernel state, fork-bomb, memory exhaustion) but
+# do NOT isolate this bot from other instances on the same host.
+# For cross-instance isolation, use containers (3.4.9).
+#
+# Excluded: directives that require CAP_SETPCAP to drop kernel
+# capabilities (ProtectKernelModules, ProtectKernelLogs, ProtectClock,
+# ProtectHostname) — user-mode systemd lacks the capability, so they
+# fail with status=218/CAPABILITIES. Also excluded: mount-namespace
+# directives (PrivateTmp, ProtectKernelTunables, ProtectControlGroups)
+# — same AppArmor issue documented in ADR 0006 appendix.
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictNamespaces=true
+MemoryMax=1G
+TasksMax=200
+LimitNPROC=200
+
 ExecStart=$execstart
 Restart=on-failure
 RestartSec=10
@@ -1549,13 +1653,13 @@ StandardError=journal
 [Install]
 WantedBy=default.target
 SVC
-    ok "service unit written"
+    ok "service unit written ($unit_name.service)"
   fi
 
   if [[ "$DRY_RUN" -ne 1 ]]; then
     export XDG_RUNTIME_DIR="/run/user/$(id -u)"
     systemctl --user daemon-reload
-    systemctl --user enable claude-telegram.service >/dev/null 2>&1
+    systemctl --user enable "${unit_name}.service" >/dev/null 2>&1
     ok "service enabled"
   fi
 }
@@ -1563,20 +1667,22 @@ SVC
 # ─── Start service + verify ───────────────────────────────────────────────
 start_service() {
   step "Start service"
+  local unit_name
+  unit_name="$(service_unit_name)"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "  [DRY] systemctl --user restart claude-telegram"
+    echo "  [DRY] systemctl --user restart $unit_name"
     return 0
   fi
 
-  systemctl --user restart claude-telegram.service
+  systemctl --user restart "${unit_name}.service"
   sleep 3
 
-  if systemctl --user is-active --quiet claude-telegram.service; then
+  if systemctl --user is-active --quiet "${unit_name}.service"; then
     ok "service is running"
   else
     warn "service failed to start. Last 20 log lines:"
-    journalctl --user -u claude-telegram -n 20 --no-pager | sed 's/^/    /'
+    journalctl --user -u "$unit_name" -n 20 --no-pager | sed 's/^/    /'
     fail "Service did not stay up. Check logs above."
   fi
 }
@@ -1600,21 +1706,24 @@ final_summary() {
   # Install finished cleanly — drop the resume crumbs.
   clear_partial_state
 
+  local unit_name
+  unit_name="$(service_unit_name)"
+
   c_green "╭────────────────────────────────────────────────────────────╮"
-  banner_line "Claudify  —  install complete" "\033[32m"
+  banner_line "Claudify  —  install complete ($INSTANCE_NAME)" "\033[32m"
   c_green "╰────────────────────────────────────────────────────────────╯"
   echo
   echo "  Send a message to your bot on Telegram to test."
   echo
   echo "  Useful commands:"
-  echo "    Status:   systemctl --user status claude-telegram"
-  echo "    Logs:     journalctl --user -u claude-telegram -f"
-  echo "    Stop:     systemctl --user stop claude-telegram"
-  echo "    Restart:  systemctl --user restart claude-telegram"
+  echo "    Status:   systemctl --user status $unit_name"
+  echo "    Logs:     journalctl --user -u $unit_name -f"
+  echo "    Stop:     systemctl --user stop $unit_name"
+  echo "    Restart:  systemctl --user restart $unit_name"
   echo
   echo "  Manifest files (what's installed):"
-  echo "    Registry:       $CLAUDIFY_ROOT/instances.json"
-  echo "    This instance:  $CLAUDIFY_ROOT/claudify.json"
+  echo "    Registry:       $CLAUDIFY_REGISTRY"
+  echo "    This instance:  $CLAUDIFY_INSTANCE_DIR/claudify.json"
   echo
   echo "  Install log: $LOG_FILE"
   echo
@@ -1684,10 +1793,17 @@ oauth_setup() {
 
 # ─── main ────────────────────────────────────────────────────────
 main() {
-  parse_args "$@"          # may exit on --help / --version
+  parse_args "$@"          # may exit on --help / --version; sets INSTANCE_NAME
+                           # and re-runs claudify_init_layout so paths reflect --name
   setup_logging            # only after we know we're really running
   detect_tty
   print_banner
+
+  # Per-instance Claude state via CLAUDE_CONFIG_DIR (ADR 0006). Export
+  # it now so install-time `claude` invocations (plugin install,
+  # setup-token, status checks) all hit the per-instance dir and not
+  # the user-wide default.
+  export CLAUDE_CONFIG_DIR="$CLAUDIFY_CLAUDE_DIR"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     warn "DRY-RUN — no system changes will be made"
@@ -1699,7 +1815,27 @@ main() {
   preflight_prereqs        # offers to install missing deps (node, jq)
   preflight_linger
 
+  # Per-instance subdirectory tree. Every Phase 4 extension type lives
+  # under one of these; create them all up front (empty placeholders
+  # are fine) so subsequent steps + future skills/MCPs/hooks have a
+  # known place to land.
+  if [[ "$DRY_RUN" -ne 1 ]]; then
+    mkdir -p \
+      "$CLAUDIFY_INSTANCE_DIR" \
+      "$CLAUDIFY_WORKSPACE" \
+      "$CLAUDIFY_TELEGRAM" \
+      "$CLAUDIFY_MCPS" \
+      "$CLAUDIFY_SKILLS" \
+      "$CLAUDIFY_HOOKS" \
+      "$CLAUDIFY_DATA" \
+      "$CLAUDIFY_CLAUDE_DIR"
+  fi
+
   collect_inputs           # walks user through BotFather + userinfobot
+
+  # Reject if the bot token is already used by another instance — only
+  # safe to check after collect_inputs has populated BOT_TOKEN.
+  check_bot_token_collision
 
   engine_install                                # install the engine binary
   engine_seed_state "$CLAUDIFY_WORKSPACE"       # skip theme + trust prompts
@@ -1711,10 +1847,9 @@ main() {
   start_service
 
   # Manifest writes — every entrypoint reads these afterwards.
-  # Today's only instance is "default"; 3.4.5 introduces multi-instance.
-  manifest_register_instance default
-  manifest_init_instance     default
-  manifest_set_channel       default telegram ""
+  manifest_register_instance "$INSTANCE_NAME"
+  manifest_init_instance     "$INSTANCE_NAME"
+  manifest_set_channel       "$INSTANCE_NAME" telegram ""
 
   final_summary
 }

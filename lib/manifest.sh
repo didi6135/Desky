@@ -1,21 +1,19 @@
 # lib/manifest.sh — registry + per-instance manifest read/write helpers
 #
 # Two JSON files are the single source of truth for "what's installed":
-#   ~/.claudify/instances.json   — top-level registry of all instances
-#   ~/.claudify/<per-instance>   — per-instance manifest
+#   ~/.claudify-registry.json    — side-car registry of all instances
+#   ~/.claudify-<name>/claudify.json   — per-instance manifest
 #
-# Today (pre-3.4.5) "per-instance" lives at the root of $CLAUDIFY_ROOT
-# because there's only one instance. 3.4.5 will move it under
-# `instances/<name>/claudify.json` as part of the multi-instance
-# layout migration. Path resolution is centralised in
-# `_instance_manifest_path` so 3.4.5 is a one-line update.
+# Per ADR 0006: flat layout, side-car registry. Each instance is fully
+# self-contained at its top-level dir; the registry is a separate file
+# at $HOME root that any install can read/write to enumerate / update.
 #
 # All writes go through `manifest_atomic_write`: write `.tmp` then mv.
 # mv is atomic on POSIX, so a Ctrl-C or power loss never leaves a
 # half-written manifest. The worst case is "the .tmp lingers", which
 # is harmless on the next run.
 #
-# Layout constant CLAUDIFY_ROOT comes from lib/layout.sh.
+# Layout constants (CLAUDIFY_REGISTRY) come from lib/layout.sh.
 # Engine ID (CLAUDIFY_ENGINE) comes from lib/engine.sh.
 # SCRIPT_VERSION comes from install.sh.
 #
@@ -34,18 +32,12 @@
 MANIFEST_VERSION=1
 
 _registry_path() {
-  printf '%s/instances.json' "$CLAUDIFY_ROOT"
+  printf '%s/.claudify-registry.json' "$HOME"
 }
 
 _instance_manifest_path() {
   local name="${1:-default}"
-  # TODO(3.4.5): once multi-instance layout lands, this becomes
-  #   printf '%s/instances/%s/claudify.json' "$CLAUDIFY_ROOT" "$name"
-  if [[ "$name" == "default" ]]; then
-    printf '%s/claudify.json' "$CLAUDIFY_ROOT"
-  else
-    printf '%s/claudify-%s.json' "$CLAUDIFY_ROOT" "$name"
-  fi
+  printf '%s/.claudify-%s/claudify.json' "$HOME" "$name"
 }
 
 # Atomic file write. $1 = target path, $2 = new contents (a string).
@@ -72,8 +64,7 @@ manifest_init_registry() {
 manifest_register_instance() {
   local name="${1:-default}"
   local engine="${CLAUDIFY_ENGINE:-claude-code}"
-  # Service name today is hardcoded; 3.4.5 introduces claudify-<name>.
-  local service_unit="claude-telegram"
+  local service_unit="claudify-${name}"
   local now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 

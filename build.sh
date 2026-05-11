@@ -27,11 +27,11 @@ OUT="$OUT_DIR/install.sh"
 # in dist mode because functions are already defined).
 MODULES=(
   ui.sh
+  layout.sh
+  validate.sh
   args.sh
   prompts.sh
-  validate.sh
   preflight.sh
-  layout.sh
   engines/claude-code.sh
   engine.sh
   manifest.sh

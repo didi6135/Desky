@@ -2,24 +2,26 @@
 #
 # The user-facing first half of the install: explains what's about to
 # happen, walks the operator through creating a Telegram bot if they
-# don't have one, and collects BOT_TOKEN / TG_USER_ID / WORKSPACE.
+# don't have one, and collects BOT_TOKEN + TG_USER_ID. (Per 3.4.5,
+# WORKSPACE is no longer a separate prompt — the instance name IS the
+# workspace identifier.)
 #
 # Constants `CLAUDIFY_TELEGRAM` etc. are defined in lib/layout.sh and
 # referenced here at call time (not source time), so source order
 # between the two doesn't matter for correctness.
 #
 # Resume-from-Ctrl-C: as soon as the user finishes pasting inputs in
-# `_collect_inputs_fresh`, we drop them in `~/.claudify/.install-partial`
-# (chmod 600). On any re-run, `_load_partial_state` silently sources
-# that file before prompting, so an interrupted install picks up
-# without re-pasting. The file is removed on successful finish (in
-# `final_summary`) and on `--reset-config`.
+# `_collect_inputs_fresh`, we drop them in
+# `~/.claudify-<name>/.install-partial` (chmod 600). On any re-run,
+# `_load_partial_state` asks whether to resume; sourcing that file
+# fills in BOT_TOKEN / TG_USER_ID without re-pasting. The file is
+# removed on successful finish (final_summary) and on --reset-config.
 #
 # Exposes:
 #   intro                 — welcome message, ENTER to continue
 #   guide_botfather       — printed walkthrough for creating a Telegram bot
 #   guide_userinfobot     — printed walkthrough for finding a Telegram user ID
-#   collect_inputs        — prompts (or reuses, in --preserve-state) the 3 inputs
+#   collect_inputs        — prompts (or reuses, in --preserve-state) the 2 inputs
 #   PARTIAL_STATE_FILE    — path of the resume file (consumed by service.sh
 #                           on success and by args.sh on --reset-config)
 
@@ -79,13 +81,13 @@ guide_userinfobot() {
 }
 
 # ─── Resume-from-Ctrl-C state ────────────────────────────────────────────
-# The file lives at the well-known path under $CLAUDIFY_ROOT (defined
-# in lib/layout.sh; resolved at call time). Holds the bot token, so
-# chmod 600 from the moment it exists.
+# The file lives under the per-instance dir (resolved at call time
+# via $CLAUDIFY_INSTANCE_DIR from lib/layout.sh). Holds the bot
+# token, so chmod 600 from the moment it exists.
 PARTIAL_STATE_FILE_NAME=".install-partial"
 
 _partial_state_path() {
-  printf '%s/%s' "$CLAUDIFY_ROOT" "$PARTIAL_STATE_FILE_NAME"
+  printf '%s/%s' "$CLAUDIFY_INSTANCE_DIR" "$PARTIAL_STATE_FILE_NAME"
 }
 
 # Write whatever inputs are currently set to disk so a Ctrl-C from
@@ -95,17 +97,15 @@ _partial_state_path() {
 # what they did paste survives.
 #
 # Only writes lines for set-and-non-empty vars, so the file's content
-# tracks "what's actually known so far" rather than mixing real values
-# with empty placeholders.
+# tracks "what's actually known so far".
 _write_partial_state() {
   local f
   f="$(_partial_state_path)"
-  mkdir -p "$CLAUDIFY_ROOT"
+  mkdir -p "$CLAUDIFY_INSTANCE_DIR"
   umask 077
   {
     [[ -n "${BOT_TOKEN:-}"  ]] && printf 'BOT_TOKEN=%s\n'  "$BOT_TOKEN"
     [[ -n "${TG_USER_ID:-}" ]] && printf 'TG_USER_ID=%s\n' "$TG_USER_ID"
-    [[ -n "${WORKSPACE:-}"  ]] && printf 'WORKSPACE=%s\n'  "$WORKSPACE"
   } > "$f"
   chmod 600 "$f"
 }
@@ -142,7 +142,6 @@ _load_partial_state() {
     case "$key" in
       BOT_TOKEN)  echo "    • Telegram bot token (saved)" ;;
       TG_USER_ID) echo "    • Telegram user ID (saved)"   ;;
-      WORKSPACE)  echo "    • Workspace name (saved)"     ;;
     esac
   done < "$f"
   echo
@@ -159,21 +158,18 @@ _load_partial_state() {
   # win. We just fill in what's still empty.
   local pre_bot="${BOT_TOKEN:-}"
   local pre_uid="${TG_USER_ID:-}"
-  local pre_ws="${WORKSPACE:-}"
 
   # shellcheck disable=SC1090
   set -a; . "$f"; set +a
 
   [[ -n "$pre_bot" ]] && BOT_TOKEN="$pre_bot"
   [[ -n "$pre_uid" ]] && TG_USER_ID="$pre_uid"
-  [[ -n "$pre_ws"  ]] && WORKSPACE="$pre_ws"
 
   # Build a human-readable list of what was actually resumed (only
   # what came from the file, not what was already in env).
   local resumed=""
   [[ -z "$pre_bot" && -n "${BOT_TOKEN:-}"  ]] && resumed+="BOT_TOKEN "
   [[ -z "$pre_uid" && -n "${TG_USER_ID:-}" ]] && resumed+="TG_USER_ID "
-  [[ -z "$pre_ws"  && -n "${WORKSPACE:-}"  ]] && resumed+="WORKSPACE "
 
   if [[ -z "$resumed" ]]; then
     return 1
@@ -181,10 +177,10 @@ _load_partial_state() {
 
   ok "resumed: ${resumed% }"
 
-  # Short-circuit only if all three are populated; otherwise fall
+  # Short-circuit only if both inputs are populated; otherwise fall
   # through so _collect_inputs_fresh prompts for whatever's still
   # missing.
-  if [[ -n "${BOT_TOKEN:-}" && -n "${TG_USER_ID:-}" && -n "${WORKSPACE:-}" ]]; then
+  if [[ -n "${BOT_TOKEN:-}" && -n "${TG_USER_ID:-}" ]]; then
     return 0
   fi
   return 1
@@ -198,8 +194,9 @@ clear_partial_state() {
 
 # ─── Inputs ────────────────────────────────────────────────────────────────
 # In --preserve-state mode (update.sh hot path), pull existing values
-# from ~/.claudify so the operator doesn't have to retype them. Fail
-# loudly if --preserve-state is set but no install exists to preserve.
+# from ~/.claudify-<name>/channels/telegram so the operator doesn't have
+# to retype them. Fail loudly if --preserve-state is set but no install
+# exists to preserve.
 _collect_inputs_preserved() {
   if [[ -z "${BOT_TOKEN:-}" && -s "$CLAUDIFY_TELEGRAM/.env" ]]; then
     BOT_TOKEN="$(grep '^TELEGRAM_BOT_TOKEN=' "$CLAUDIFY_TELEGRAM/.env" | cut -d= -f2-)"
@@ -209,8 +206,6 @@ _collect_inputs_preserved() {
     TG_USER_ID="$(jq -r '.allowFrom[0] // empty' "$CLAUDIFY_TELEGRAM/access.json" 2>/dev/null || true)"
     export TG_USER_ID
   fi
-  WORKSPACE="${WORKSPACE:-claude-bot}"
-  export WORKSPACE
 
   if [[ -z "${BOT_TOKEN:-}" || -z "${TG_USER_ID:-}" ]]; then
     fail "--preserve-state but no existing config found in $CLAUDIFY_TELEGRAM.
@@ -218,7 +213,7 @@ _collect_inputs_preserved() {
   fi
   ok "BOT_TOKEN reused from $CLAUDIFY_TELEGRAM/.env"
   ok "TG_USER_ID reused from $CLAUDIFY_TELEGRAM/access.json ($TG_USER_ID)"
-  ok "WORKSPACE = $WORKSPACE"
+  ok "Instance: $INSTANCE_NAME"
 }
 
 # Fresh install: prompt for whichever inputs aren't pre-filled via env.
@@ -246,13 +241,6 @@ _collect_inputs_fresh() {
     "" TG_USER_ID validate_user_id \
     "Must be all digits."
   _write_partial_state
-
-  echo
-  ask_validated \
-    "Workspace folder name" \
-    "claude-bot" WORKSPACE validate_workspace \
-    "Letters, digits, dot, underscore, hyphen only — no spaces."
-  _write_partial_state
 }
 
 collect_inputs() {
@@ -268,4 +256,34 @@ collect_inputs() {
   fi
 
   _collect_inputs_fresh
+}
+
+# Bot-token collision check: a Telegram bot token can only be polled
+# by ONE process at a time. If another instance on this host already
+# uses the same token, install must refuse before touching state.
+# Called from install.sh main() AFTER collect_inputs has populated
+# BOT_TOKEN.
+check_bot_token_collision() {
+  [[ -z "${BOT_TOKEN:-}" ]] && return 0
+  shopt -s nullglob
+  local found=()
+  local env_file
+  for env_file in "$HOME"/.claudify-*/channels/telegram/.env; do
+    # Skip the current instance's own file (re-runs / preserve-state).
+    [[ "$env_file" == "$CLAUDIFY_TELEGRAM/.env" ]] && continue
+    if grep -q "^TELEGRAM_BOT_TOKEN=$BOT_TOKEN\$" "$env_file" 2>/dev/null; then
+      # Extract instance name from the path: ~/.claudify-<name>/channels/...
+      local other_instance="${env_file##*/.claudify-}"
+      other_instance="${other_instance%%/*}"
+      found+=("$other_instance")
+    fi
+  done
+  shopt -u nullglob
+
+  if [[ ${#found[@]} -gt 0 ]]; then
+    fail "BOT_TOKEN already in use by instance(s): ${found[*]}.
+     Telegram allows only one polling client per token. Either:
+       - Use a different bot token (create another bot in @BotFather), or
+       - Uninstall the conflicting instance first: bash uninstall.sh --name <name> --yes"
+  fi
 }

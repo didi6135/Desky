@@ -3,32 +3,25 @@
 #
 # Usage (from the target server):
 #   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/doctor.sh)
-#   bash doctor.sh                  # if the repo is cloned
+#   bash doctor.sh                       (default: pick from registry / default)
+#   bash doctor.sh --name client-a       (named instance)
+#   bash doctor.sh --all                 (every registered instance)
 #
 # Read-only. Runs as the user who owns the install (no sudo).
-# Prints one line per check with a green ✓ / yellow ⚠ / red ✗ and, on
-# failure, a concrete next-step hint. Final summary at the bottom.
 
-# NOT set -e: we want every check to run even if some fail.
 set -uo pipefail
 
 # ─── Output helpers ───────────────────────────────────────────────────────
-# Each prints a full line (\n included). When used inside $(…) the trailing
-# newline is stripped, so nesting inside echo/printf works naturally too.
 c_red()    { printf '\033[31m%s\033[0m\n' "$*"; }
 c_green()  { printf '\033[32m%s\033[0m\n' "$*"; }
 c_yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 c_cyan()   { printf '\033[36m%s\033[0m\n' "$*"; }
 c_bold()   { printf '\033[1m%s\033[0m\n'  "$*"; }
 
-PASS=0
-WARN=0
-FAIL=0
+PASS=0; WARN=0; FAIL=0
 
 section() { echo; c_cyan "━━━ $* ━━━"; echo; }
 
-# check <description> <exit_status> [hint…]
-# pass 0 for pass, 1 for fail, 2 for warn. Remaining args are hint lines printed on fail/warn.
 check() {
   local desc="$1" status="$2"; shift 2
   case "$status" in
@@ -40,32 +33,63 @@ check() {
   esac
 }
 
-# ─── Constants (must mirror install.sh) ───────────────────────────────────
-CLAUDIFY_ROOT="$HOME/.claudify"
-CLAUDIFY_WORKSPACE="$CLAUDIFY_ROOT/workspace"
-CLAUDIFY_TELEGRAM="$CLAUDIFY_ROOT/telegram"
-CREDS_FILE="$CLAUDIFY_ROOT/credentials.env"
-SERVICE_UNIT="$HOME/.config/systemd/user/claude-telegram.service"
-REGISTRY_FILE="$CLAUDIFY_ROOT/instances.json"
-INSTANCE_MANIFEST="$CLAUDIFY_ROOT/claudify.json"  # 3.4.5 will move under instances/<name>/
+# ─── Args ─────────────────────────────────────────────────────────────────
+INSTANCE_NAME=""
+ALL=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --name) INSTANCE_NAME="$2"; shift 2 ;;
+    --all)  ALL=1; shift ;;
+    -h|--help)
+      cat <<HELP
+Claudify doctor.sh
 
-# Systemctl --user needs this in a non-interactive SSH context
+Usage:
+  bash doctor.sh                  Pick from registry, or 'default' if alone
+  bash doctor.sh --name <NAME>    Check a specific named instance
+  bash doctor.sh --all            Check every registered instance
+HELP
+      exit 0 ;;
+    *) echo "Unknown flag: $1 (try --help)" >&2; exit 1 ;;
+  esac
+done
+
+REGISTRY_FILE="$HOME/.claudify-registry.json"
+
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-
-# Put bun + npm-global on PATH so `claude` and `bun` commands resolve
 export PATH="$HOME/.bun/bin:$HOME/.npm-global/bin:$PATH"
 
-# Load the OAuth token so `claude auth status` has what it needs
-if [[ -s "$CREDS_FILE" ]]; then
-  set -a; . "$CREDS_FILE"; set +a
+# ─── Pick instance(s) to check ────────────────────────────────────────────
+INSTANCES=()
+if [[ "$ALL" -eq 1 ]]; then
+  if [[ -s "$REGISTRY_FILE" ]] && command -v jq >/dev/null 2>&1; then
+    while IFS= read -r n; do INSTANCES+=("$n"); done < <(jq -r '.instances | keys[]' "$REGISTRY_FILE")
+  fi
+elif [[ -n "$INSTANCE_NAME" ]]; then
+  INSTANCES=("$INSTANCE_NAME")
+else
+  # No flag: pick from registry, fall back to 'default'
+  if [[ -s "$REGISTRY_FILE" ]] && command -v jq >/dev/null 2>&1; then
+    count=$(jq '.instances | length' "$REGISTRY_FILE")
+    if [[ "$count" -eq 1 ]]; then
+      INSTANCES=("$(jq -r '.instances | keys[0]' "$REGISTRY_FILE")")
+    elif [[ "$count" -gt 1 ]]; then
+      c_yellow "Multiple instances registered. Listing summary; use --name <NAME> for full check."
+      jq -r '.instances | to_entries[] | "  • \(.key)  (engine=\(.value.engine), service=\(.value.service))"' "$REGISTRY_FILE"
+      INSTANCES=("$(jq -r '.instances | keys[0]' "$REGISTRY_FILE")")
+      echo
+      c_yellow "Running full check for: ${INSTANCES[0]}"
+    fi
+  fi
+  [[ ${#INSTANCES[@]} -eq 0 ]] && INSTANCES=("default")
 fi
 
-# ═════════════════════════════════════════════════════════════════════════
+# ─── Banner ───────────────────────────────────────────────────────────────
 c_bold "╭────────────────────────────────────────────────────────────╮"
 c_bold "│                  Claudify  —  doctor                       │"
 c_bold "╰────────────────────────────────────────────────────────────╯"
 
-# ─── Environment ──────────────────────────────────────────────────────────
+# ─── Per-host checks (run once) ───────────────────────────────────────────
 section "Environment"
 if [[ "$(uname -s)" == "Linux" ]]; then
   check "Linux host ($(uname -m))" 0
@@ -73,308 +97,217 @@ else
   check "Not Linux — this server cannot host the bot" 1 \
     "Claudify installs require a Linux server with systemd."
 fi
-
 if [[ -r /etc/os-release ]]; then
   # shellcheck disable=SC1091
   . /etc/os-release
   check "OS: ${PRETTY_NAME:-unknown}" 0
 fi
-
 check "Running as user: $USER (uid $(id -u))" 0
 
-# ─── Dependencies ─────────────────────────────────────────────────────────
 section "Dependencies"
-if command -v node >/dev/null 2>&1; then
-  check "node $(node --version)" 0
-else
-  check "node is missing" 1 "Install Node.js 20+ (via NodeSource or apt)"
-fi
+command -v node    >/dev/null 2>&1 && check "node $(node --version)"  0 || check "node missing"   1 "Install Node.js 20+"
+command -v npm     >/dev/null 2>&1 && check "npm $(npm --version)"    0 || check "npm missing"    1 "Install npm"
+command -v bun     >/dev/null 2>&1 && check "bun $(bun --version)"    0 || check "bun missing"    1 "curl -fsSL https://bun.sh/install | bash"
+command -v jq      >/dev/null 2>&1 && check "jq present"              0 || check "jq missing"     1 "Install jq via apt"
+command -v claude  >/dev/null 2>&1 && check "claude $(claude --version 2>/dev/null | head -1)" 0 || check "claude missing" 1 "npm install -g @anthropic-ai/claude-code"
+[[ -x /usr/bin/script ]]            && check "/usr/bin/script (util-linux)" 0 || check "/usr/bin/script missing" 1 "sudo apt install -y util-linux"
 
-if command -v npm >/dev/null 2>&1; then
-  check "npm $(npm --version)" 0
-else
-  check "npm is missing" 1 "Install npm (usually bundled with node)"
-fi
-
-if command -v bun >/dev/null 2>&1; then
-  check "bun $(bun --version)" 0
-else
-  check "bun is missing (required by the Telegram plugin)" 1 \
-    "curl -fsSL https://bun.sh/install | bash"
-fi
-
-if command -v jq >/dev/null 2>&1; then
-  check "jq present" 0
-else
-  check "jq is missing" 2 "sudo apt install -y jq  (optional but recommended)"
-fi
-
-if command -v claude >/dev/null 2>&1; then
-  check "claude $(claude --version 2>/dev/null | head -1)" 0
-else
-  check "claude CLI is missing" 1 "npm install -g @anthropic-ai/claude-code"
-fi
-
-if command -v /usr/bin/script >/dev/null 2>&1 || [[ -x /usr/bin/script ]]; then
-  check "/usr/bin/script (util-linux)" 0
-else
-  check "/usr/bin/script missing" 1 "sudo apt install -y util-linux"
-fi
-
-# ─── Claudify layout ──────────────────────────────────────────────────────
-section "Claudify layout  ($CLAUDIFY_ROOT)"
-if [[ -d "$CLAUDIFY_ROOT" ]]; then
-  check "root directory exists" 0
-else
-  check "root directory missing" 1 "Run install.sh — no Claudify install was found"
-  # If the root is missing, most further checks will cascade — bail now
-  echo
-  c_red "Doctor aborting: no Claudify install detected."
-  exit 1
-fi
-
-if [[ -d "$CLAUDIFY_WORKSPACE" ]]; then
-  check "workspace/ dir exists" 0
-else
-  check "workspace/ missing" 1 "Re-run install.sh to recreate"
-fi
-
-if [[ -s "$CREDS_FILE" ]]; then
-  perms=$(stat -c '%a' "$CREDS_FILE")
-  if [[ "$perms" == "600" ]]; then
-    check "credentials.env present (mode 600)" 0
-  else
-    check "credentials.env has wide permissions (mode $perms)" 2 \
-      "chmod 600 $CREDS_FILE"
-  fi
-else
-  check "credentials.env missing" 1 \
-    "Re-run install.sh — OAuth token was never persisted"
-fi
-
-if [[ -s "$CLAUDIFY_TELEGRAM/.env" ]]; then
-  perms=$(stat -c '%a' "$CLAUDIFY_TELEGRAM/.env")
-  if [[ "$perms" == "600" ]]; then
-    check "telegram/.env present (mode 600)" 0
-  else
-    check "telegram/.env has wide permissions (mode $perms)" 2 \
-      "chmod 600 $CLAUDIFY_TELEGRAM/.env"
-  fi
-else
-  check "telegram/.env missing (bot token)" 1 "Re-run install.sh"
-fi
-
-if [[ -s "$CLAUDIFY_TELEGRAM/access.json" ]]; then
-  if jq -e 'has("allowFrom")' "$CLAUDIFY_TELEGRAM/access.json" >/dev/null 2>&1; then
-    n=$(jq '.allowFrom | length' "$CLAUDIFY_TELEGRAM/access.json")
-    check "access.json valid ($n allowlisted users)" 0
-  else
-    check "access.json missing 'allowFrom' key" 1 "Re-run install.sh"
-  fi
-else
-  check "access.json missing" 1 "Re-run install.sh"
-fi
-
-# ─── Manifests ────────────────────────────────────────────────────────────
-section "Manifests  ($REGISTRY_FILE / $INSTANCE_MANIFEST)"
-if [[ -s "$REGISTRY_FILE" ]]; then
-  if jq -e 'has("instances")' "$REGISTRY_FILE" >/dev/null 2>&1; then
-    n_inst=$(jq '.instances | length' "$REGISTRY_FILE")
-    check "instances.json valid ($n_inst registered instance(s))" 0
-  else
-    check "instances.json missing 'instances' key" 1 \
-      "Re-run install.sh — registry seems corrupt"
-  fi
-else
-  check "instances.json missing" 1 \
-    "Re-run install.sh (registry is written at the end of install)"
-fi
-
-if [[ -s "$INSTANCE_MANIFEST" ]]; then
-  if jq -e 'has("name") and has("engine") and has("channels")' "$INSTANCE_MANIFEST" >/dev/null 2>&1; then
-    iname=$(jq -r '.name' "$INSTANCE_MANIFEST")
-    iengine=$(jq -r '.engine' "$INSTANCE_MANIFEST")
-    n_ch=$(jq '.channels | length' "$INSTANCE_MANIFEST")
-    check "claudify.json valid (name=$iname, engine=$iengine, $n_ch channel(s))" 0
-  else
-    check "claudify.json missing required fields" 1 \
-      "Expected name + engine + channels — re-run install.sh"
-  fi
-else
-  check "claudify.json missing" 1 \
-    "Re-run install.sh (per-instance manifest is written at the end of install)"
-fi
-
-# ─── Claude Code state ────────────────────────────────────────────────────
-section "Claude Code state  ($HOME/.claude.json)"
-if [[ -s "$HOME/.claude.json" ]]; then
-  if jq -e '.hasCompletedOnboarding == true' "$HOME/.claude.json" >/dev/null 2>&1; then
-    check "onboarding seeded (hasCompletedOnboarding: true)" 0
-  else
-    check "onboarding not seeded — service will hang at theme prompt" 1 \
-      "Re-run install.sh (the seed_claude_state step fixes this)"
-  fi
-
-  if jq -e --arg d "$CLAUDIFY_WORKSPACE" \
-       '.projects[$d].hasTrustDialogAccepted == true' \
-       "$HOME/.claude.json" >/dev/null 2>&1; then
-    check "workspace trust set for $CLAUDIFY_WORKSPACE" 0
-  else
-    check "workspace trust NOT set — service will hang at trust prompt" 1 \
-      "Re-run install.sh"
-  fi
-else
-  check "~/.claude.json missing" 1 "Re-run install.sh to seed Claude's user-wide state"
-fi
-
-if command -v claude >/dev/null 2>&1; then
-  if claude plugin list 2>/dev/null | grep -q "telegram.*claude-plugins-official"; then
-    check "telegram plugin installed" 0
-  else
-    check "telegram plugin NOT installed" 1 \
-      "claude plugin install telegram@claude-plugins-official"
-  fi
-
-  if claude auth status 2>&1 | grep -qE '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
-    # Pull subscription type if available
-    sub=$(claude auth status 2>&1 | grep -oE '"subscriptionType":[[:space:]]*"[^"]+"' | cut -d'"' -f4)
-    check "Claude authenticated${sub:+ (subscription: $sub)}" 0
-  else
-    check "Claude NOT authenticated — API calls will 401" 1 \
-      "Make sure $CREDS_FILE has CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-…" \
-      "Re-run claude setup-token if the token is missing"
-  fi
-fi
-
-# ─── Systemd service ──────────────────────────────────────────────────────
-section "Systemd service  (claude-telegram.service, user scope)"
-linger=$(loginctl show-user "$USER" 2>/dev/null | grep '^Linger=' | cut -d= -f2)
+linger=$(loginctl show-user "$USER" 2>/dev/null | grep '^Linger=' | cut -d= -f2 || true)
 if [[ "$linger" == "yes" ]]; then
   check "linger enabled for $USER" 0
 else
-  check "linger is disabled — service dies on SSH logout" 1 \
-    "sudo loginctl enable-linger $USER"
+  check "linger disabled — service dies on logout" 1 "sudo loginctl enable-linger $USER"
 fi
 
-if [[ -f "$SERVICE_UNIT" ]]; then
-  check "unit file present ($SERVICE_UNIT)" 0
+# ─── Per-instance checks ──────────────────────────────────────────────────
+check_instance() {
+  local name="$1"
+  local instance_dir="$HOME/.claudify-$name"
+  local workspace="$instance_dir/workspace"
+  local telegram="$instance_dir/channels/telegram"
+  local creds="$instance_dir/credentials.env"
+  local claude_dir="$instance_dir/claude"
+  local manifest="$instance_dir/claudify.json"
+  local unit_name="claudify-$name"
+  local unit_file="$HOME/.config/systemd/user/${unit_name}.service"
 
-  # Sanity-check a few key lines in the unit
-  if grep -q "^EnvironmentFile=-%h/.claudify/credentials.env" "$SERVICE_UNIT"; then
-    check "unit points at ~/.claudify/credentials.env" 0
-  else
-    check "unit EnvironmentFile is not ~/.claudify/credentials.env" 2 \
-      "You may be on an older layout — re-run install.sh"
+  # Load OAuth token for claude auth checks
+  if [[ -s "$creds" ]]; then
+    set -a; . "$creds"; set +a
   fi
-  if grep -q "^Environment=TELEGRAM_STATE_DIR=%h/.claudify/telegram" "$SERVICE_UNIT"; then
-    check "unit sets TELEGRAM_STATE_DIR to ~/.claudify/telegram" 0
+  # Per-instance Claude config dir
+  export CLAUDE_CONFIG_DIR="$claude_dir"
+
+  section "Instance '$name'  ($instance_dir)"
+  if [[ -d "$instance_dir" ]]; then
+    check "instance dir exists" 0
   else
-    check "unit missing TELEGRAM_STATE_DIR" 2 \
-      "Re-run install.sh to update the service unit"
+    check "instance dir missing" 1 "Run install.sh --name $name"
+    return
   fi
-else
-  check "unit file missing" 1 "Re-run install.sh"
-fi
 
-# daemon-reload isn't strictly required here, but status queries below need
-# the user bus to be reachable
-if systemctl --user is-enabled claude-telegram >/dev/null 2>&1; then
-  check "service enabled (starts on boot)" 0
-else
-  check "service not enabled" 2 "systemctl --user enable claude-telegram"
-fi
+  # Layout subdirs
+  for sub in workspace channels mcps skills hooks data claude; do
+    [[ -d "$instance_dir/$sub" ]] && check "$sub/ exists" 0 || check "$sub/ missing" 1 "Re-run install.sh --name $name"
+  done
 
-if systemctl --user is-active --quiet claude-telegram; then
-  started=$(systemctl --user show claude-telegram --property=ActiveEnterTimestamp --value)
-  check "service is active (since: $started)" 0
-
-  svc_pid=$(systemctl --user show claude-telegram --property=MainPID --value)
-  # Look for bun among descendants
-  if [[ -n "$svc_pid" && "$svc_pid" != "0" ]] \
-     && pstree -p "$svc_pid" 2>/dev/null | grep -q 'bun'; then
-    check "bun MCP subprocess is running (plugin active)" 0
+  # Secrets at rest
+  if [[ -s "$creds" ]]; then
+    perms=$(stat -c '%a' "$creds")
+    if [[ "$perms" == "600" ]]; then check "credentials.env mode 600" 0
+    else check "credentials.env mode $perms (expected 600)" 2 "chmod 600 $creds"; fi
   else
-    check "bun subprocess not found — plugin likely failed to start" 1 \
-      "Check: journalctl --user -u claude-telegram -n 50 --no-pager" \
-      "Most common cause: ~/.bun/bin not on systemd PATH"
+    check "credentials.env missing" 1 "Re-run install.sh --name $name (OAuth token never persisted)"
   fi
-else
-  check "service is NOT running" 1 \
-    "systemctl --user status claude-telegram" \
-    "journalctl --user -u claude-telegram -n 50 --no-pager"
-fi
 
-# ─── Telegram reachability ────────────────────────────────────────────────
-section "Telegram"
-if [[ -s "$CLAUDIFY_TELEGRAM/.env" ]]; then
-  # shellcheck disable=SC1091
-  TELEGRAM_BOT_TOKEN="$(grep '^TELEGRAM_BOT_TOKEN=' "$CLAUDIFY_TELEGRAM/.env" | cut -d= -f2-)"
+  if [[ -s "$telegram/.env" ]]; then
+    perms=$(stat -c '%a' "$telegram/.env")
+    [[ "$perms" == "600" ]] && check "channels/telegram/.env mode 600" 0 \
+                            || check "channels/telegram/.env mode $perms (expected 600)" 2 "chmod 600 $telegram/.env"
+  else
+    check "channels/telegram/.env missing (bot token)" 1 "Re-run install.sh --name $name"
+  fi
 
-  if [[ -n "$TELEGRAM_BOT_TOKEN" ]]; then
-    bot_info=$(curl -s --max-time 10 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe")
-    if echo "$bot_info" | grep -q '"ok":true'; then
-      username=$(echo "$bot_info" | grep -oE '"username":"[^"]+"' | head -1 | cut -d'"' -f4)
-      check "bot token valid (@${username:-?})" 0
+  if [[ -s "$telegram/access.json" ]]; then
+    if jq -e 'has("allowFrom")' "$telegram/access.json" >/dev/null 2>&1; then
+      n=$(jq '.allowFrom | length' "$telegram/access.json")
+      check "access.json valid ($n allowlisted user(s))" 0
     else
-      check "Telegram rejected the bot token" 1 \
-        "Revoke via /revoke in @BotFather, issue a new token, re-run install"
-    fi
-
-    # getWebhookInfo — webhook would block polling
-    webhook=$(curl -s --max-time 10 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo")
-    if echo "$webhook" | grep -q '"url":""'; then
-      check "no webhook set (correct — we use polling)" 0
-    else
-      check "webhook is set — blocks polling" 1 \
-        "DELETE via: curl https://api.telegram.org/bot\$TOKEN/deleteWebhook"
-    fi
-
-    # getUpdates: if our service is polling, this request will 409.
-    updates=$(curl -s --max-time 5 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?timeout=1")
-    if echo "$updates" | grep -q '"error_code":409'; then
-      check "service is actively polling (409 from getUpdates as expected)" 0
-    elif echo "$updates" | grep -q '"ok":true'; then
-      check "no one is polling Telegram — service isn't connected" 1 \
-        "The service may be up but claude didn't spawn the plugin" \
-        "journalctl --user -u claude-telegram -n 100 --no-pager"
-    else
-      check "Telegram getUpdates returned unexpected response" 2 \
-        "Response: $(echo "$updates" | head -c 200)"
+      check "access.json missing 'allowFrom' key" 1 "Re-run install.sh --name $name"
     fi
   else
-    check "bot token is empty in telegram/.env" 1 "Re-run install.sh"
+    check "access.json missing" 1 "Re-run install.sh --name $name"
   fi
-else
-  check "telegram/.env missing — can't test" 1 "Re-run install.sh"
-fi
+
+  # Manifest
+  if [[ -s "$manifest" ]]; then
+    if jq -e 'has("name") and has("engine") and has("channels")' "$manifest" >/dev/null 2>&1; then
+      iname=$(jq -r '.name' "$manifest"); iengine=$(jq -r '.engine' "$manifest")
+      n_ch=$(jq '.channels | length' "$manifest")
+      check "claudify.json valid (name=$iname, engine=$iengine, $n_ch channel(s))" 0
+    else
+      check "claudify.json missing required fields" 1 "Re-run install.sh --name $name"
+    fi
+  else
+    check "claudify.json missing" 1 "Re-run install.sh --name $name"
+  fi
+
+  # Per-instance Claude state (CLAUDE_CONFIG_DIR target)
+  if [[ -s "$claude_dir/.claude.json" ]]; then
+    if jq -e '.hasCompletedOnboarding == true' "$claude_dir/.claude.json" >/dev/null 2>&1; then
+      check "onboarding seeded ($claude_dir/.claude.json)" 0
+    else
+      check "onboarding not seeded — service may hang" 1 "Re-run install.sh --name $name"
+    fi
+    if jq -e --arg d "$workspace" '.projects[$d].hasTrustDialogAccepted == true' "$claude_dir/.claude.json" >/dev/null 2>&1; then
+      check "workspace trust set for $workspace" 0
+    else
+      check "workspace trust NOT set" 1 "Re-run install.sh --name $name"
+    fi
+  else
+    check "$claude_dir/.claude.json missing" 1 "Re-run install.sh --name $name"
+  fi
+
+  if command -v claude >/dev/null 2>&1; then
+    if claude auth status 2>&1 | grep -qE '"loggedIn"[[:space:]]*:[[:space:]]*true'; then
+      check "Claude authenticated" 0
+    else
+      check "Claude NOT authenticated — API calls will 401" 1 \
+        "Make sure $creds has CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-…"
+    fi
+  fi
+
+  # Systemd unit
+  if [[ -f "$unit_file" ]]; then
+    check "unit file present ($unit_name.service)" 0
+    grep -q "^EnvironmentFile=-%h/.claudify-${name}/credentials.env" "$unit_file" \
+      && check "unit references the per-instance credentials.env" 0 \
+      || check "unit EnvironmentFile mismatch" 2 "Re-run install.sh --name $name"
+    grep -q "^Environment=CLAUDE_CONFIG_DIR=%h/.claudify-${name}/claude" "$unit_file" \
+      && check "unit sets CLAUDE_CONFIG_DIR per-instance" 0 \
+      || check "unit missing CLAUDE_CONFIG_DIR" 2 "Re-run install.sh --name $name"
+    # Tier-1 hardening (the directives that actually work on Ubuntu 24.04 user-mode)
+    local tier1=(NoNewPrivileges RestrictSUIDSGID LockPersonality RestrictRealtime RestrictNamespaces MemoryMax TasksMax LimitNPROC)
+    local missing=()
+    for d in "${tier1[@]}"; do
+      grep -qE "^${d}=" "$unit_file" || missing+=("$d")
+    done
+    if [[ ${#missing[@]} -eq 0 ]]; then
+      check "Tier-1 hardening directives present" 0
+    else
+      check "Tier-1 hardening: ${#missing[@]} directive(s) missing" 2 \
+        "Missing: ${missing[*]}" "Re-run install.sh --name $name"
+    fi
+  else
+    check "unit file missing ($unit_file)" 1 "Re-run install.sh --name $name"
+  fi
+
+  if systemctl --user is-enabled "$unit_name" >/dev/null 2>&1; then
+    check "service enabled" 0
+  else
+    check "service not enabled" 2 "systemctl --user enable $unit_name"
+  fi
+
+  if systemctl --user is-active --quiet "$unit_name"; then
+    started=$(systemctl --user show "$unit_name" --property=ActiveEnterTimestamp --value)
+    check "service is active (since: $started)" 0
+    svc_pid=$(systemctl --user show "$unit_name" --property=MainPID --value)
+    if [[ -n "$svc_pid" && "$svc_pid" != "0" ]] && pstree -p "$svc_pid" 2>/dev/null | grep -q 'bun'; then
+      check "bun MCP subprocess is running" 0
+    else
+      check "bun subprocess not found — plugin likely failed to start" 1 \
+        "journalctl --user -u $unit_name -n 50 --no-pager"
+    fi
+  else
+    check "service is NOT running" 1 "journalctl --user -u $unit_name -n 50 --no-pager"
+  fi
+
+  # Telegram reachability (only if we have a token)
+  if [[ -s "$telegram/.env" ]]; then
+    local TBOT
+    TBOT="$(grep '^TELEGRAM_BOT_TOKEN=' "$telegram/.env" | cut -d= -f2-)"
+    if [[ -n "$TBOT" ]]; then
+      bot_info=$(curl -s --max-time 10 "https://api.telegram.org/bot${TBOT}/getMe")
+      if echo "$bot_info" | grep -q '"ok":true'; then
+        username=$(echo "$bot_info" | grep -oE '"username":"[^"]+"' | head -1 | cut -d'"' -f4)
+        check "bot token valid (@${username:-?})" 0
+      else
+        check "Telegram rejected the bot token" 1 "Revoke + reissue via @BotFather"
+      fi
+      updates=$(curl -s --max-time 5 "https://api.telegram.org/bot${TBOT}/getUpdates?timeout=1")
+      if echo "$updates" | grep -q '"error_code":409'; then
+        check "service is actively polling (409 from getUpdates as expected)" 0
+      elif echo "$updates" | grep -q '"ok":true'; then
+        check "no one is polling Telegram — service isn't connected" 1 "journalctl --user -u $unit_name -n 100 --no-pager"
+      fi
+    fi
+  fi
+}
+
+# ─── Run ──────────────────────────────────────────────────────────────────
+for name in "${INSTANCES[@]}"; do
+  check_instance "$name"
+done
 
 # ─── Summary ──────────────────────────────────────────────────────────────
 echo
 total=$((PASS + WARN + FAIL))
 if (( FAIL == 0 && WARN == 0 )); then
   c_green "╭────────────────────────────────────────────────────────────╮"
-  c_green "│                 All $total checks passed.                      │"
+  c_green "│                 All $total checks passed.                       │"
   c_green "╰────────────────────────────────────────────────────────────╯"
-  echo
-  echo "  Your bot should be fully operational. Send it a Telegram message."
-  echo
+  echo; echo "  Your bot(s) should be fully operational."; echo
   exit 0
 elif (( FAIL == 0 )); then
   c_yellow "╭────────────────────────────────────────────────────────────╮"
   c_yellow "│           $PASS passed, $WARN warnings, 0 failures.                │"
   c_yellow "╰────────────────────────────────────────────────────────────╯"
-  echo
-  echo "  Bot should work, but the warnings above are worth addressing."
-  echo
+  echo; echo "  Bot should work, but the warnings above are worth addressing."; echo
   exit 0
 else
   c_red "╭────────────────────────────────────────────────────────────╮"
   c_red "│      $PASS passed, $WARN warnings, $FAIL failure(s) — fix above.       │"
   c_red "╰────────────────────────────────────────────────────────────╯"
-  echo
-  echo "  Fix each ✗ above (hints are printed inline) and re-run doctor."
-  echo "  Full reinstall (scrubs ALL state):"
-  echo "      bash ~/test/autoinstall.sh"
-  echo
+  echo; echo "  Fix each ✗ above (hints inline) and re-run doctor."; echo
   exit 1
 fi

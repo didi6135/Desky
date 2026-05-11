@@ -3,8 +3,9 @@
 #
 # Usage (target server, after SSH'ing in):
 #   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash -s -- --dry-run
-#   BOT_TOKEN=… TG_USER_ID=… WORKSPACE=… bash install.sh
+#   curl -fsSL .../install.sh | bash -s -- --name client-a       # named instance
+#   curl -fsSL .../install.sh | bash -s -- --dry-run
+#   BOT_TOKEN=… TG_USER_ID=… INSTANCE_NAME=… bash install.sh
 #
 # When distributed, the BUILT single-file output of build.sh
 # (dist/install.sh) is what users actually fetch. This file (install.sh
@@ -31,11 +32,14 @@ LIB_DIR="$SCRIPT_DIR/lib"
 
 # Order matters:
 #   ui.sh         — opens the log file, defines colors and ok/warn/fail
-#   args.sh       — parse_args + run() (depends on fail)
+#   layout.sh     — INSTANCE_NAME-aware paths (~/.claudify-<name>/...)
+#                   sourced BEFORE args.sh because args.sh::parse_args calls
+#                   claudify_init_layout to refresh paths after --name parsing
+#   validate.sh   — pure validators (validate_instance_name lives here)
+#   args.sh       — parse_args + run() (depends on fail, validate_instance_name,
+#                                       claudify_init_layout)
 #   prompts.sh    — TTY detect + ask family (depends on fail)
-#   validate.sh   — pure validators
 #   preflight.sh  — uses ui + prompts
-#   layout.sh     — claudify on-disk paths (CLAUDIFY_ROOT, _WORKSPACE, _TELEGRAM, CREDS_FILE)
 #   engine.sh     — picks the engine adapter and sources lib/engines/<id>.sh
 #                   into scope (defines all engine_* contract functions)
 #   manifest.sh   — registry + per-instance manifest read/write helpers (uses jq)
@@ -45,16 +49,16 @@ LIB_DIR="$SCRIPT_DIR/lib"
 #   oauth.sh      — interactive OAuth orchestration (uses engine_auth_check, engine_auth_setup)
 # shellcheck source=lib/ui.sh
 source "$LIB_DIR/ui.sh"
+# shellcheck source=lib/layout.sh
+source "$LIB_DIR/layout.sh"
+# shellcheck source=lib/validate.sh
+source "$LIB_DIR/validate.sh"
 # shellcheck source=lib/args.sh
 source "$LIB_DIR/args.sh"
 # shellcheck source=lib/prompts.sh
 source "$LIB_DIR/prompts.sh"
-# shellcheck source=lib/validate.sh
-source "$LIB_DIR/validate.sh"
 # shellcheck source=lib/preflight.sh
 source "$LIB_DIR/preflight.sh"
-# shellcheck source=lib/layout.sh
-source "$LIB_DIR/layout.sh"
 # shellcheck source=lib/engine.sh
 source "$LIB_DIR/engine.sh"
 # shellcheck source=lib/manifest.sh
@@ -69,10 +73,17 @@ source "$LIB_DIR/service.sh"
 source "$LIB_DIR/oauth.sh"
 
 main() {
-  parse_args "$@"          # may exit on --help / --version
+  parse_args "$@"          # may exit on --help / --version; sets INSTANCE_NAME
+                           # and re-runs claudify_init_layout so paths reflect --name
   setup_logging            # only after we know we're really running
   detect_tty
   print_banner
+
+  # Per-instance Claude state via CLAUDE_CONFIG_DIR (ADR 0006). Export
+  # it now so install-time `claude` invocations (plugin install,
+  # setup-token, status checks) all hit the per-instance dir and not
+  # the user-wide default.
+  export CLAUDE_CONFIG_DIR="$CLAUDIFY_CLAUDE_DIR"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     warn "DRY-RUN — no system changes will be made"
@@ -84,7 +95,27 @@ main() {
   preflight_prereqs        # offers to install missing deps (node, jq)
   preflight_linger
 
+  # Per-instance subdirectory tree. Every Phase 4 extension type lives
+  # under one of these; create them all up front (empty placeholders
+  # are fine) so subsequent steps + future skills/MCPs/hooks have a
+  # known place to land.
+  if [[ "$DRY_RUN" -ne 1 ]]; then
+    mkdir -p \
+      "$CLAUDIFY_INSTANCE_DIR" \
+      "$CLAUDIFY_WORKSPACE" \
+      "$CLAUDIFY_TELEGRAM" \
+      "$CLAUDIFY_MCPS" \
+      "$CLAUDIFY_SKILLS" \
+      "$CLAUDIFY_HOOKS" \
+      "$CLAUDIFY_DATA" \
+      "$CLAUDIFY_CLAUDE_DIR"
+  fi
+
   collect_inputs           # walks user through BotFather + userinfobot
+
+  # Reject if the bot token is already used by another instance — only
+  # safe to check after collect_inputs has populated BOT_TOKEN.
+  check_bot_token_collision
 
   engine_install                                # install the engine binary
   engine_seed_state "$CLAUDIFY_WORKSPACE"       # skip theme + trust prompts
@@ -96,10 +127,9 @@ main() {
   start_service
 
   # Manifest writes — every entrypoint reads these afterwards.
-  # Today's only instance is "default"; 3.4.5 introduces multi-instance.
-  manifest_register_instance default
-  manifest_init_instance     default
-  manifest_set_channel       default telegram ""
+  manifest_register_instance "$INSTANCE_NAME"
+  manifest_init_instance     "$INSTANCE_NAME"
+  manifest_set_channel       "$INSTANCE_NAME" telegram ""
 
   final_summary
 }

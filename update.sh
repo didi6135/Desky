@@ -1,34 +1,73 @@
 #!/usr/bin/env bash
-# update.sh — refresh Claudify to the latest main branch, in place.
+# update.sh — refresh a Claudify instance to the latest main branch, in place.
 #
 # Usage (on the target server):
 #   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/update.sh)
+#   bash <(curl -fsSL .../update.sh) --name client-a
+#   bash <(curl -fsSL .../update.sh) --all          # update every registered instance
 #   bash update.sh
 #
-# What it does:
+# What it does (per instance):
 #   Fetches the latest dist/install.sh from main and runs it with
-#   --preserve-state --non-interactive. That means:
-#     • BOT_TOKEN (~/.claudify/telegram/.env)       — preserved
-#     • TG_USER_ID allowlist (access.json)          — preserved
-#     • CLAUDE_CODE_OAUTH_TOKEN (credentials.env)   — preserved
-#     • systemd unit file                            — rewritten (so unit
-#                                                      changes land)
-#     • ~/.claude.json onboarding + trust seed       — reseeded (idempotent)
-#     • claude plugin + bun                          — updated if available
-#     • service                                      — restarted
+#   --preserve-state --non-interactive --name <NAME>. That means:
+#     • BOT_TOKEN (~/.claudify-<n>/channels/telegram/.env)   — preserved
+#     • TG_USER_ID allowlist (access.json)                    — preserved
+#     • CLAUDE_CODE_OAUTH_TOKEN (credentials.env)             — preserved
+#     • systemd unit file                                      — rewritten
+#     • per-instance Claude state                              — reseeded
+#     • claude plugin + bun                                    — updated if available
+#     • service                                                — restarted
 #
-# Typically takes 10-20s on a healthy install. No OAuth prompts, no
+# Typically takes 10-20s on a healthy instance. No OAuth prompts, no
 # questions.
 #
-# If your install doesn't exist yet, this script will fail and tell
-# you to run install.sh instead.
+# If no Claudify install exists, this script tells you to run install.sh.
 
 set -euo pipefail
 
-# Refuse to run if no Claudify state exists — update implies there's
-# something to update.
-if [[ ! -d "$HOME/.claudify" ]] || [[ ! -s "$HOME/.claudify/telegram/.env" ]]; then
-  echo "No Claudify install found at ~/.claudify."
+INSTANCE_NAME="default"
+ALL=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --name)
+      [[ $# -lt 2 ]] && { echo "--name requires a value" >&2; exit 1; }
+      INSTANCE_NAME="$2"; shift 2 ;;
+    --all) ALL=1; shift ;;
+    -h|--help)
+      cat <<HELP
+Claudify update.sh
+
+Usage:
+  bash update.sh                    Update the 'default' instance
+  bash update.sh --name <NAME>      Update a specific named instance
+  bash update.sh --all              Update every registered instance
+
+What's preserved across update:
+  bot token, allowlist, OAuth credentials, persona (CLAUDE.md edits).
+What's refreshed:
+  systemd unit, claude binary + plugin, ~/.claude state seed, service restart.
+HELP
+      exit 0 ;;
+    *) echo "Unknown flag: $1 (try --help)" >&2; exit 1 ;;
+  esac
+done
+
+REGISTRY="$HOME/.claudify-registry.json"
+
+# Refuse if no Claudify install exists at all.
+if [[ ! -s "$REGISTRY" ]]; then
+  # Legacy fallback: pre-3.4.5 single-instance layout at ~/.claudify/
+  if [[ -d "$HOME/.claudify" ]]; then
+    echo "Detected pre-3.4.5 single-instance layout at ~/.claudify/."
+    echo "3.4.5 changes the layout to ~/.claudify-<name>/ — migration is the"
+    echo "job of 3.4.7 (not yet released). Until then, please uninstall first:"
+    echo "    bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/uninstall.sh) --yes"
+    echo "Then reinstall:"
+    echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash"
+    exit 1
+  fi
+  echo "No Claudify install found (no $REGISTRY)."
   echo
   echo "This script updates an existing install. For a first-time install, run:"
   echo
@@ -37,8 +76,31 @@ if [[ ! -d "$HOME/.claudify" ]] || [[ ! -s "$HOME/.claudify/telegram/.env" ]]; t
   exit 1
 fi
 
-# Cache-bust — raw.githubusercontent.com has CDN edges that sometimes serve
-# a stale copy for minutes after a push. A query string forces a fresh
-# fetch. (The server ignores the query; the cache keys on it.)
-curl -fsSL "https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh?t=$(date +%s)" \
-  | bash -s -- --preserve-state
+# Cache-bust the dist URL — raw.githubusercontent.com has CDN edges
+# that sometimes serve a stale copy for minutes after a push.
+DIST_URL="https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh?t=$(date +%s)"
+
+run_update() {
+  local name="$1"
+  local instance_dir="$HOME/.claudify-$name"
+  if [[ ! -d "$instance_dir" ]]; then
+    echo "Instance '$name' not found at $instance_dir — skipping."
+    return 0
+  fi
+  echo
+  echo "=== Updating instance '$name' ==="
+  curl -fsSL "$DIST_URL" \
+    | bash -s -- --preserve-state --name "$name"
+}
+
+if [[ "$ALL" -eq 1 ]]; then
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "--all requires jq to read the registry. Install with: apt install jq" >&2
+    exit 1
+  fi
+  while IFS= read -r name; do
+    run_update "$name"
+  done < <(jq -r '.instances | keys[]' "$REGISTRY")
+else
+  run_update "$INSTANCE_NAME"
+fi

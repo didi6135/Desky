@@ -69,8 +69,9 @@ _npm_prefix_setup() {
 #   projects[<abs-path>].hasTrustDialogAccepted     (per-workspace)
 #   projects[<abs-path>].hasCompletedProjectOnboarding
 _seed_claude_json() {
-  local config="$HOME/.claude.json"
+  local config="$CLAUDIFY_CLAUDE_DIR/.claude.json"
   local wsdir="$1"
+  mkdir -p "$CLAUDIFY_CLAUDE_DIR"
   local existing='{}'
   [[ -s "$config" ]] && existing=$(cat "$config")
 
@@ -85,13 +86,13 @@ _seed_claude_json() {
       })
   ' > "$config.tmp" && mv "$config.tmp" "$config"
 
-  ok "seeded ~/.claude.json (onboarding + trust for $wsdir)"
+  ok "seeded $config (onboarding + trust for $wsdir)"
 }
 
 # Auto-allow the telegram plugin's tools so the bot doesn't prompt the
 # operator (via Telegram!) to approve every reply/react/edit.
 _seed_settings_json() {
-  local settings="$HOME/.claude/settings.json"
+  local settings="$CLAUDIFY_CLAUDE_DIR/settings.json"
   mkdir -p "$(dirname "$settings")"
   local existing='{}'
   [[ -s "$settings" ]] && existing=$(cat "$settings")
@@ -108,7 +109,7 @@ _seed_settings_json() {
       )
   ' > "$settings.tmp" && mv "$settings.tmp" "$settings"
 
-  ok "auto-allowed telegram plugin tools in ~/.claude/settings.json"
+  ok "auto-allowed telegram plugin tools in $settings"
 }
 
 # Run `claude setup-token` in a real PTY (`script(1)`) so its TUI
@@ -183,13 +184,13 @@ engine_seed_state() {
   mkdir -p "$wsdir"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "  [DRY] merge hasCompletedOnboarding + trust($wsdir) into ~/.claude.json"
-    echo "  [DRY] merge permissions.allow for telegram plugin tools into ~/.claude/settings.json"
+    echo "  [DRY] merge hasCompletedOnboarding + trust($wsdir) into $CLAUDIFY_CLAUDE_DIR/.claude.json"
+    echo "  [DRY] merge permissions.allow for telegram plugin tools into $CLAUDIFY_CLAUDE_DIR/settings.json"
     return 0
   fi
 
   if ! command -v jq >/dev/null 2>&1; then
-    fail "jq is required for seeding ~/.claude.json but was not found"
+    fail "jq is required for seeding the Claude state but was not found"
   fi
 
   _seed_claude_json "$wsdir"

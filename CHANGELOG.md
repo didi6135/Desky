@@ -13,6 +13,26 @@ fresh Unreleased block goes back on top.
 
 ### Added
 
+- **Multi-instance bash install (phase 3.4.5).** Per-instance flat
+  layout at `~/.claudify-<name>/`. Each install creates its own
+  systemd user unit `claudify-<name>.service`, with its own state
+  dir, channels, manifest, and Claude config (via
+  `CLAUDE_CONFIG_DIR`). Side-car registry at
+  `~/.claudify-registry.json` lists every instance on the host.
+  New `--name <NAME>` flag on `install.sh`, `update.sh`, `uninstall.sh`,
+  `doctor.sh` (default: `default`). `update.sh --all` and
+  `doctor.sh --all` iterate the registry. Bot-token collision check
+  refuses install if another instance on the same host already uses
+  the bot token (Telegram allows only one polling client per token).
+  Dropped the `WORKSPACE` prompt — instance name is the identifier.
+- **Tier-1 systemd hardening** baked into the unit. Working subset
+  for user-mode systemd on Ubuntu 24.04: `NoNewPrivileges`,
+  `RestrictSUIDSGID`, `LockPersonality`, `RestrictRealtime`,
+  `RestrictNamespaces` (seccomp-based), `MemoryMax=1G`,
+  `TasksMax=200`, `LimitNPROC=200` (cgroup-based). Protects the
+  host from a misbehaving bot (kernel-state, fork-bomb, memory
+  exhaustion). Cross-instance isolation is NOT provided — see
+  CHANGELOG entry under Changed for the why and the path forward.
 - **Manifest files — single source of truth for "what's installed".**
   Two new JSON files: `~/.claudify/instances.json` (registry, lists
   every Claudify instance on this machine + each one's engine,
@@ -96,6 +116,24 @@ fresh Unreleased block goes back on top.
   Future engines plug in by writing one file. (See ADR 0005.)
 
 ### Changed
+
+- **Cross-instance isolation dropped from the bash install path.**
+  The original 3.4.5 plan (ADR 0006) called for mount-namespace
+  isolation via `ProtectHome=tmpfs + BindPaths`. Station11 testing
+  on 2026-05-10 confirmed these directives silently no-op on
+  Ubuntu 24.04 user-mode systemd. Root cause:
+  `kernel.apparmor_restrict_unprivileged_userns=1` (Ubuntu's
+  default since 24.04 LTS) blocks unprivileged user namespaces
+  from performing mount operations. `PrivateUsers=yes +
+  PrivateMounts=yes` didn't help. Several `Protect*` directives
+  also fail in user mode (`status=218/CAPABILITIES` because user-
+  mode systemd lacks `CAP_SETPCAP`). Documented in ADR 0006
+  appendix. Multi-instance bash install ships honestly: separate
+  folders, separate units, separate Telegram bots — but no kernel-
+  enforced separation between instances on the same host. For real
+  multi-tenant isolation, see 3.4.9 (containerize Claudify, coming
+  next) which provides container-level isolation that works on
+  Ubuntu 24.04.
 
 - **Engine abstraction layer extracted** — Claude-Code-specific code
   moved to `lib/engines/claude-code.sh` implementing an 8-function

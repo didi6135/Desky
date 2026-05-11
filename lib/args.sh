@@ -10,6 +10,7 @@ DRY_RUN=0
 RESET_CONFIG=0
 NON_INTERACTIVE=0
 PRESERVE_STATE=0
+# INSTANCE_NAME is initialised in lib/layout.sh; --name may override.
 
 show_help() {
   cat <<HELP
@@ -19,11 +20,16 @@ Usage:
   bash install.sh [flags]
 
 Flags:
+  --name <NAME>       Instance name (default: 'default'). Lowercase letters,
+                      digits, _, -. 2-31 chars. Each instance lives at
+                      ~/.claudify-<NAME>/ and runs as
+                      claudify-<NAME>.service. Multiple instances coexist
+                      side-by-side, isolated by systemd mount namespaces.
   --dry-run           Print actions without modifying the system
   --reset-config      Overwrite existing token/allowlist (default: preserve)
   --preserve-state    Update mode: reuse existing BOT_TOKEN, TG_USER_ID,
-                      OAuth token from ~/.claudify; only refresh the
-                      systemd unit + reseed claude.json. No prompts.
+                      OAuth token from ~/.claudify-<name>; only refresh
+                      the systemd unit + reseed claude state. No prompts.
                       Typically invoked by update.sh.
   --non-interactive   Skip all "Press ENTER" pauses and confirmation
                       prompts. Useful for automated tests / CI. Requires
@@ -35,7 +41,7 @@ Flags:
 Environment (any can be set to skip its prompt):
   BOT_TOKEN         Telegram bot token from @BotFather
   TG_USER_ID        Your numeric Telegram user ID from @userinfobot
-  WORKSPACE         Workspace folder name (default: claude-bot)
+  INSTANCE_NAME     Instance name (same effect as --name)
 
 Logs:
   $LOG_FILE
@@ -45,6 +51,17 @@ HELP
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --name)
+        if [[ $# -lt 2 ]]; then
+          fail "--name requires a value (e.g. --name client-a)"
+        fi
+        if ! validate_instance_name "$2"; then
+          fail "invalid instance name '$2' — must match ^[a-z][a-z0-9_-]{1,30}\$ and not collide with common commands (ls, rm, git, claude, etc.)"
+        fi
+        INSTANCE_NAME="$2"
+        export INSTANCE_NAME
+        shift
+        ;;
       --dry-run)         DRY_RUN=1 ;;
       --reset-config)    RESET_CONFIG=1 ;;
       --preserve-state)  PRESERVE_STATE=1; NON_INTERACTIVE=1 ;;  # implies non-interactive
@@ -55,6 +72,9 @@ parse_args() {
     esac
     shift
   done
+
+  # Re-resolve layout paths now that INSTANCE_NAME may have changed.
+  claudify_init_layout
 
   # --reset-config means "start clean" — wipe the resume crumbs too,
   # otherwise we'd silently re-load a stale BOT_TOKEN the operator
