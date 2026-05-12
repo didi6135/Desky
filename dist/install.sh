@@ -4,7 +4,7 @@
 # THIS FILE IS GENERATED. Do not edit directly.
 # Source:  https://github.com/didi6135/Claudify
 # Edit:    install.sh + lib/*.sh in the source repo, then run `bash build.sh`
-# Built:   2026-05-11T06:06:48Z
+# Built:   2026-05-12T05:51:07Z
 #
 # Usage (on a target Linux server):
 #   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
@@ -516,6 +516,12 @@ preflight_linger() {
 # ─── from lib/engines/claude-code.sh ─────────────────────────────────────────────────
 # lib/engines/claude-code.sh — Claude Code engine adapter
 #
+# NOTE: file is over the CLAUDE.md ≤300-line budget (10-function
+# contract + helpers + headers). The "no cross-adapter sourcing"
+# invariant means the contract must live in one file per engine; we
+# accept the overage rather than break that invariant. Revisit if a
+# future contract growth makes splitting unavoidable.
+#
 # Implements the engine contract from `lib/engines/README.md`. Today
 # this is the only adapter; future adapters (Gemini CLI, OpenAI Codex,
 # etc.) ship as additional `lib/engines/<id>.sh` files implementing
@@ -545,6 +551,8 @@ preflight_linger() {
 #   engine_run_args                 — echo full ExecStart command for systemd
 #   engine_status                   — echo JSON status object
 #   engine_uninstall                — no-op (engine binary shared across instances)
+#   engine_memory_setup             — register the claudify-memory MCP (3.4.5.2 stub; Phase 4.0b)
+#   engine_apply_persona <text>     — write a marker-bracketed persona block into CLAUDE.md
 
 # ─── Constants (engine-specific) ──────────────────────────────────────────
 # user-local npm prefix so `npm install -g` doesn't need sudo
@@ -804,6 +812,53 @@ engine_uninstall() {
   return 0
 }
 
+# ─── Contract: engine_memory_setup ────────────────────────────────────────
+# Make the `claudify-memory` MCP visible to the engine. Idempotent.
+#
+# 3.4.5.2 stub: real implementation lands in Phase 4.0b alongside the
+# claudify-memory MCP server. For now this is a no-op so install.sh can
+# call it unconditionally without ordering hazards. The future body
+# will copy/build the MCP into $CLAUDIFY_INSTANCE_DIR/bin/ and run
+# `claude mcp add claudify-memory ...` against $CLAUDIFY_CLAUDE_DIR.
+engine_memory_setup() {
+  return 0
+}
+
+# ─── Contract: engine_apply_persona <text> ────────────────────────────────
+# Push the rendered persona snippet into Claude Code's always-loaded
+# context surface — a marker-bracketed region inside
+# ${CLAUDIFY_INSTANCE_DIR}/workspace/CLAUDE.md. The markers make this
+# idempotent: re-running with the same text leaves the file
+# byte-identical; re-running with new text replaces only the marked
+# region so operator-added text outside the block survives.
+engine_apply_persona() {
+  local rendered="$1"
+  local target="$CLAUDIFY_INSTANCE_DIR/workspace/CLAUDE.md"
+  mkdir -p "$(dirname "$target")"
+
+  local marker_start='<!-- claudify:persona:start -->'
+  local marker_end='<!-- claudify:persona:end -->'
+  local block
+  block="$(printf '%s\n%s\n%s\n' "$marker_start" "$rendered" "$marker_end")"
+
+  if [[ -s "$target" ]] && grep -q "$marker_start" "$target"; then
+    awk -v start="$marker_start" -v end="$marker_end" -v new="$block" '
+      $0 ~ start { print new; in_block=1; next }
+      in_block && $0 ~ end { in_block=0; next }
+      in_block { next }
+      { print }
+    ' "$target" > "$target.tmp" && mv "$target.tmp" "$target"
+  else
+    if [[ -s "$target" ]]; then
+      printf '%s\n\n%s\n' "$block" "$(cat "$target")" > "$target.tmp"
+      mv "$target.tmp" "$target"
+    else
+      printf '%s\n' "$block" > "$target"
+    fi
+  fi
+  chmod 644 "$target"
+}
+
 # ─── from lib/engine.sh ─────────────────────────────────────────────────
 # lib/engine.sh — pick the engine adapter and source it
 #
@@ -876,6 +931,8 @@ fi
 #   manifest_init_instance <n>       — create per-instance manifest if missing
 #   manifest_set_channel <n> <ch> [v] — add/update a channel entry
 #   manifest_set_mcp <n> <mcp> [v]   — add/update an MCP entry
+#   manifest_set_skill <n> <id> [w] [r] — add/update a skill entry with optional memory decl.
+#   manifest_get_skill_memory <n> <id>  — echo the skill's memory object as compact JSON
 #   manifest_read_field <n> <jq>     — read one field via jq -r
 #   manifest_atomic_write <f> <body> — internal helper, exposed for tests
 
@@ -1051,6 +1108,66 @@ manifest_set_mcp() {
   manifest_atomic_write "$f" "$merged"
 }
 
+# manifest_set_skill <instance> <skill-id> [writes-json] [reads-json]
+#
+# Add or update one entry in `.skills[]`. The `writes-json` and
+# `reads-json` arguments are optional JSON literals (e.g. '"x.db"' or
+# '["a","b"]'). When both are empty the skill entry is added/updated
+# without a `memory` declaration; when either is set, a `memory` object
+# is composed with whichever slots were provided.
+manifest_set_skill() {
+  local name="${1:?manifest_set_skill: instance name required}"
+  local skill_id="${2:?manifest_set_skill: skill id required}"
+  local writes_json="${3:-}"
+  local reads_json="${4:-}"
+  local now
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  local f
+  f="$(_instance_manifest_path "$name")"
+  [[ -s "$f" ]] || manifest_init_instance "$name"
+
+  # Compose the memory object once (null when neither slot is supplied).
+  local memory_json='null'
+  if [[ -n "$writes_json" && -n "$reads_json" ]]; then
+    memory_json="$(jq -nc --argjson w "$writes_json" --argjson r "$reads_json" \
+                   '{writes:$w,reads:$r}')"
+  elif [[ -n "$writes_json" ]]; then
+    memory_json="$(jq -nc --argjson w "$writes_json" '{writes:$w}')"
+  elif [[ -n "$reads_json" ]]; then
+    memory_json="$(jq -nc --argjson r "$reads_json" '{reads:$r}')"
+  fi
+
+  local merged
+  merged="$(jq --arg id "$skill_id" \
+              --arg now "$now" \
+              --argjson mem "$memory_json" '
+    .skills = (.skills // [])
+    | (.skills | map(.id) | index($id)) as $i
+    | (if $mem == null then {id:$id, installed_at:$now}
+        else {id:$id, installed_at:$now, memory:$mem} end) as $entry
+    | if $i == null then
+        .skills += [$entry]
+      else
+        .skills[$i] = (.skills[$i] + $entry)
+      end' "$f")"
+  manifest_atomic_write "$f" "$merged"
+}
+
+# Echo the skill's `memory` object as compact JSON, or empty if absent.
+# Used by lib/memory.sh::_memory_assert; safe to call when no manifest
+# or no such skill exists — emits nothing rather than erroring.
+manifest_get_skill_memory() {
+  local name="${1:?manifest_get_skill_memory: instance name required}"
+  local skill_id="${2:?manifest_get_skill_memory: skill id required}"
+  local f
+  f="$(_instance_manifest_path "$name")"
+  [[ -s "$f" ]] || return 0
+  jq -c --arg id "$skill_id" '
+    (.skills // []) | map(select(.id == $id))[0].memory // empty
+  ' "$f"
+}
+
 manifest_read_field() {
   local name="${1:?manifest_read_field: instance name required}"
   local jq_path="${2:?manifest_read_field: jq path required}"
@@ -1058,6 +1175,94 @@ manifest_read_field() {
   f="$(_instance_manifest_path "$name")"
   [[ -s "$f" ]] || return 1
   jq -r "$jq_path" "$f"
+}
+
+# ─── from lib/memory.sh ─────────────────────────────────────────────────
+# lib/memory.sh — per-skill data dirs + ${CLAUDIFY_SKILL_DATA}
+#
+# Skill storage substrate, ahead of any actual skill. Two responsibilities:
+#
+# 1. Resolve a per-skill, mode-700 data directory under
+#    ${CLAUDIFY_INSTANCE_DIR}/data/<skill-id>/. Different skill, different
+#    path — file-level isolation, no broker, no daemon. Matches Anthropic's
+#    ${CLAUDE_PLUGIN_DATA} convention so cross-ecosystem skills work.
+#
+# 2. Manifest-driven *accident* asserts (memory.writes / memory.reads).
+#    Per ADR 0006 the trust model is single-user; the asserts catch
+#    typos in db names, not adversaries.
+#
+# Storage substrate persists across update.sh and --reset-config; only
+# uninstall.sh wipes ${CLAUDIFY_INSTANCE_DIR}.
+#
+# Layout constants come from lib/layout.sh (CLAUDIFY_INSTANCE_DIR,
+# INSTANCE_NAME). Manifest helpers come from lib/manifest.sh
+# (manifest_get_skill_memory). No engine coupling.
+#
+# Exposes:
+#   memory_dir <skill-id>                  — echo + mkdir 700 the skill's data dir
+#   memory_path <skill-id> <filename>      — echo "<memory_dir>/<filename>"
+#   memory_assert_write <skill-id> <db>    — non-zero if memory.writes lacks <db>
+#   memory_assert_read  <skill-id> <db>    — non-zero if memory.reads  lacks <db>
+#   memory_export_env <skill-id>           — export CLAUDIFY_SKILL_DATA=<memory_dir>
+
+_memory_root() {
+  printf '%s/data' "$CLAUDIFY_INSTANCE_DIR"
+}
+
+memory_dir() {
+  local skill_id="${1:?memory_dir: skill-id required}"
+  local d
+  d="$(_memory_root)/$skill_id"
+  mkdir -p "$d"
+  chmod 700 "$d"
+  printf '%s' "$d"
+}
+
+memory_path() {
+  local skill_id="${1:?memory_path: skill-id required}"
+  local filename="${2:?memory_path: filename required}"
+  printf '%s/%s' "$(memory_dir "$skill_id")" "$filename"
+}
+
+# Manifest-driven assert: was <db> declared under the named slot?
+# slot ∈ {writes, reads}. Both string and array JSON forms accepted.
+_memory_assert() {
+  local skill_id="$1" db_name="$2" slot="$3"
+  local instance="${INSTANCE_NAME:-default}"
+  local mem allowed
+  mem="$(manifest_get_skill_memory "$instance" "$skill_id" 2>/dev/null || true)"
+  if [[ -z "$mem" || "$mem" == "null" ]]; then
+    printf 'memory: skill %q has no memory declaration — refusing %s of %q\n' \
+           "$skill_id" "$slot" "$db_name" >&2
+    return 1
+  fi
+  allowed="$(printf '%s' "$mem" | jq -r --arg slot "$slot" '
+    (.[$slot] // empty) | if type == "array" then .[] else . end
+  ')"
+  if ! printf '%s\n' "$allowed" | grep -Fxq -- "$db_name"; then
+    printf 'memory: skill %q tried to %s %q but manifest allows only: %s\n' \
+           "$skill_id" "$slot" "$db_name" \
+           "$(printf '%s' "$allowed" | tr '\n' ' ')" >&2
+    return 1
+  fi
+}
+
+memory_assert_write() {
+  _memory_assert "${1:?memory_assert_write: skill-id required}" \
+                 "${2:?memory_assert_write: db-name required}" \
+                 writes
+}
+
+memory_assert_read() {
+  _memory_assert "${1:?memory_assert_read: skill-id required}" \
+                 "${2:?memory_assert_read: db-name required}" \
+                 reads
+}
+
+memory_export_env() {
+  local skill_id="${1:?memory_export_env: skill-id required}"
+  CLAUDIFY_SKILL_DATA="$(memory_dir "$skill_id")"
+  export CLAUDIFY_SKILL_DATA
 }
 
 # ─── from lib/onboarding.sh ─────────────────────────────────────────────────

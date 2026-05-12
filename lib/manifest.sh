@@ -26,6 +26,8 @@
 #   manifest_init_instance <n>       — create per-instance manifest if missing
 #   manifest_set_channel <n> <ch> [v] — add/update a channel entry
 #   manifest_set_mcp <n> <mcp> [v]   — add/update an MCP entry
+#   manifest_set_skill <n> <id> [w] [r] — add/update a skill entry with optional memory decl.
+#   manifest_get_skill_memory <n> <id>  — echo the skill's memory object as compact JSON
 #   manifest_read_field <n> <jq>     — read one field via jq -r
 #   manifest_atomic_write <f> <body> — internal helper, exposed for tests
 
@@ -199,6 +201,66 @@ manifest_set_mcp() {
       version: $ver
     })' "$f")"
   manifest_atomic_write "$f" "$merged"
+}
+
+# manifest_set_skill <instance> <skill-id> [writes-json] [reads-json]
+#
+# Add or update one entry in `.skills[]`. The `writes-json` and
+# `reads-json` arguments are optional JSON literals (e.g. '"x.db"' or
+# '["a","b"]'). When both are empty the skill entry is added/updated
+# without a `memory` declaration; when either is set, a `memory` object
+# is composed with whichever slots were provided.
+manifest_set_skill() {
+  local name="${1:?manifest_set_skill: instance name required}"
+  local skill_id="${2:?manifest_set_skill: skill id required}"
+  local writes_json="${3:-}"
+  local reads_json="${4:-}"
+  local now
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  local f
+  f="$(_instance_manifest_path "$name")"
+  [[ -s "$f" ]] || manifest_init_instance "$name"
+
+  # Compose the memory object once (null when neither slot is supplied).
+  local memory_json='null'
+  if [[ -n "$writes_json" && -n "$reads_json" ]]; then
+    memory_json="$(jq -nc --argjson w "$writes_json" --argjson r "$reads_json" \
+                   '{writes:$w,reads:$r}')"
+  elif [[ -n "$writes_json" ]]; then
+    memory_json="$(jq -nc --argjson w "$writes_json" '{writes:$w}')"
+  elif [[ -n "$reads_json" ]]; then
+    memory_json="$(jq -nc --argjson r "$reads_json" '{reads:$r}')"
+  fi
+
+  local merged
+  merged="$(jq --arg id "$skill_id" \
+              --arg now "$now" \
+              --argjson mem "$memory_json" '
+    .skills = (.skills // [])
+    | (.skills | map(.id) | index($id)) as $i
+    | (if $mem == null then {id:$id, installed_at:$now}
+        else {id:$id, installed_at:$now, memory:$mem} end) as $entry
+    | if $i == null then
+        .skills += [$entry]
+      else
+        .skills[$i] = (.skills[$i] + $entry)
+      end' "$f")"
+  manifest_atomic_write "$f" "$merged"
+}
+
+# Echo the skill's `memory` object as compact JSON, or empty if absent.
+# Used by lib/memory.sh::_memory_assert; safe to call when no manifest
+# or no such skill exists — emits nothing rather than erroring.
+manifest_get_skill_memory() {
+  local name="${1:?manifest_get_skill_memory: instance name required}"
+  local skill_id="${2:?manifest_get_skill_memory: skill id required}"
+  local f
+  f="$(_instance_manifest_path "$name")"
+  [[ -s "$f" ]] || return 0
+  jq -c --arg id "$skill_id" '
+    (.skills // []) | map(select(.id == $id))[0].memory // empty
+  ' "$f"
 }
 
 manifest_read_field() {

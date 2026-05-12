@@ -13,6 +13,36 @@ fresh Unreleased block goes back on top.
 
 ### Added
 
+- **Skill data substrate (phase 3.4.5.1).** Per-skill data dirs at
+  `~/.claudify-<name>/data/<skill-id>/` (mode 700, persists across
+  `update.sh` and `--reset-config`; only `uninstall.sh` wipes them).
+  New `lib/memory.sh` (86 lines) exposes 5 helpers: `memory_dir`,
+  `memory_path`, `memory_assert_write`, `memory_assert_read`,
+  `memory_export_env` — the last sets `CLAUDIFY_SKILL_DATA` so skill
+  authors can write `${CLAUDIFY_SKILL_DATA}/foo.db` and trust the path
+  exists, is private to their skill, and survives upgrades (matches
+  Anthropic's `${CLAUDE_PLUGIN_DATA}` convention). Manifest schema
+  gains `skills[].memory.{writes,reads}`; new `manifest_set_skill`
+  + `manifest_get_skill_memory` helpers. The assert helpers are
+  accident-prevention (typo guard), not a sandbox — single-user trust
+  model per ADR 0006. `tests/bash/memory.bats` covers the 5 helpers
+  + idempotency + array-form writes + assert rejection paths.
+
+### Changed
+
+- **Engine contract grows from 8 to 10 functions (phase 3.4.5.2).**
+  Two new contract entries cover the engine-specific memory surface:
+  `engine_memory_setup` (register the `claudify-memory` MCP — no-op
+  stub today; real body lands in Phase 4.0b alongside the MCP server)
+  and `engine_apply_persona <text>` (push a rendered persona snippet
+  into whatever the engine reads on every model session — Claude Code
+  writes a marker-bracketed block into
+  `${CLAUDIFY_INSTANCE_DIR}/workspace/CLAUDE.md`, idempotent + leaves
+  operator-added text outside the markers untouched). `engines/README.md`
+  updated to document all 10 functions.
+
+### Added
+
 - **Multi-instance bash install (phase 3.4.5).** Per-instance flat
   layout at `~/.claudify-<name>/`. Each install creates its own
   systemd user unit `claudify-<name>.service`, with its own state

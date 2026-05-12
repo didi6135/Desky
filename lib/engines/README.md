@@ -11,7 +11,7 @@ the criteria that gate adding a new adapter.
 
 ## The contract
 
-Every `lib/engines/<engine-id>.sh` must define **8 functions**:
+Every `lib/engines/<engine-id>.sh` must define **10 functions**:
 
 | Function | Args | What it does |
 |---|---|---|
@@ -23,9 +23,11 @@ Every `lib/engines/<engine-id>.sh` must define **8 functions**:
 | `engine_run_args` | — | Echo the full `ExecStart=` line for the systemd unit. Each engine decides whether it needs `script(1)` wrapping (Claude Code does — its TUI requires a real PTY). |
 | `engine_status` | — | Echo a JSON object: `{"engine": "...", "version": "...", "authenticated": true/false}`. |
 | `engine_uninstall` | — | Remove engine-specific state from `~/.claudify/`. Does NOT remove the engine binary itself — that's host-wide and may be in use elsewhere. |
+| `engine_memory_setup` | — | Make the `claudify-memory` MCP visible to the engine. Idempotent. No-op for engines without an MCP layer (or, today, the Claude Code adapter — the real MCP lands in Phase 4.0b). |
+| `engine_apply_persona` | `<text>` | Push the rendered persona snippet into whatever surface the engine reads on every model session (Claude Code: a marker-bracketed block in `${CLAUDIFY_INSTANCE_DIR}/workspace/CLAUDE.md`). Idempotent — same input → byte-identical file; new input replaces only the marked region. |
 
 Adapters may define private helper functions (prefix with `_`); the
-public API is exactly these 8.
+public API is exactly these 10.
 
 ## Naming
 
@@ -39,7 +41,7 @@ public API is exactly these 8.
 - Adapters define functions and constants. **No top-level work, no
   I/O on source.**
 - Adapters do not source each other or other lib modules.
-- All 8 contract functions must be defined even if some are no-ops
+- All 10 contract functions must be defined even if some are no-ops
   (`return 0`).
 - The header comment lists `Exposes:` with the 8 function names plus
   any engine-specific public constants.
@@ -55,6 +57,6 @@ public API is exactly these 8.
 | [`claude-code.sh`](claude-code.sh) | Claude Code | Today's only adapter. npm-installable; needs `script(1)` PTY wrap; channel plugins via `claude-plugins-official` marketplace. |
 
 When we add a second engine: drop a new file here implementing the
-8-function contract, and that's it — the rest of the codebase is
+10-function contract, and that's it — the rest of the codebase is
 already engine-agnostic. ADR 0005 documents the trigger conditions
 for actually adding one.

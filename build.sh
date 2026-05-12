@@ -35,6 +35,7 @@ MODULES=(
   engines/claude-code.sh
   engine.sh
   manifest.sh
+  memory.sh
   onboarding.sh
   configs.sh
   service.sh

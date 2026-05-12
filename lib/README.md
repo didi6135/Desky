@@ -31,12 +31,13 @@ single self-contained `dist/install.sh`.
 | `preflight.sh` | pre-install checks + auto-install of missing deps | `preflight_os`, `preflight_prereqs`, `preflight_linger`, `offer_apt_install`, `install_node` |
 | `layout.sh` | Claudify on-disk paths (engine-agnostic) | `CLAUDIFY_ROOT`, `CLAUDIFY_WORKSPACE`, `CLAUDIFY_TELEGRAM`, `CREDS_FILE` |
 | `engine.sh` | picks the engine adapter, sources `lib/engines/<id>.sh` into scope | `CLAUDIFY_ENGINE`, `engine_id` |
-| `manifest.sh` | registry + per-instance manifest read/write helpers (jq-backed, atomic writes) | `manifest_init_registry`, `manifest_register_instance`, `manifest_unregister_instance`, `manifest_list_instances`, `manifest_get_instance`, `manifest_init_instance`, `manifest_set_channel`, `manifest_set_mcp`, `manifest_read_field`, `manifest_atomic_write` |
+| `manifest.sh` | registry + per-instance manifest read/write helpers (jq-backed, atomic writes) | `manifest_init_registry`, `manifest_register_instance`, `manifest_unregister_instance`, `manifest_list_instances`, `manifest_get_instance`, `manifest_init_instance`, `manifest_set_channel`, `manifest_set_mcp`, `manifest_set_skill`, `manifest_get_skill_memory`, `manifest_read_field`, `manifest_atomic_write` |
+| `memory.sh` | per-skill data dirs + manifest-driven write/read asserts ([`docs/skills.md §10`](../docs/skills.md)) | `memory_dir`, `memory_path`, `memory_assert_write`, `memory_assert_read`, `memory_export_env`, `CLAUDIFY_SKILL_DATA` (env var, set by `memory_export_env`) |
 | `onboarding.sh` | welcome banner + Telegram walkthroughs + resumable input collection | `intro`, `guide_botfather`, `guide_userinfobot`, `collect_inputs`, `clear_partial_state` |
 | `configs.sh` | bot `.env` + allowlist + starter persona | `write_configs`, `seed_persona` |
 | `service.sh` | systemd user unit + start + final summary | `write_service`, `start_service`, `final_summary` (uses `engine_run_args`) |
 | `oauth.sh` | engine-agnostic OAuth orchestration | `oauth_setup` (delegates token capture to `engine_auth_setup`) |
-| `engines/` | engine adapters (one file per LLM CLI) — see `lib/engines/README.md` and `docs/architecture.md §6` | each adapter exposes the contract: `engine_install`, `engine_seed_state`, `engine_install_channel_plugin`, `engine_auth_check`, `engine_auth_setup`, `engine_run_args`, `engine_status`, `engine_uninstall` |
+| `engines/` | engine adapters (one file per LLM CLI) — see `lib/engines/README.md` and `docs/architecture.md §6` | each adapter exposes the 10-function contract: `engine_install`, `engine_seed_state`, `engine_install_channel_plugin`, `engine_auth_check`, `engine_auth_setup`, `engine_run_args`, `engine_status`, `engine_uninstall`, `engine_memory_setup`, `engine_apply_persona` |
 
 ## When to split a module further
 

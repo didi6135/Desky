@@ -1,5 +1,11 @@
 # lib/engines/claude-code.sh — Claude Code engine adapter
 #
+# NOTE: file is over the CLAUDE.md ≤300-line budget (10-function
+# contract + helpers + headers). The "no cross-adapter sourcing"
+# invariant means the contract must live in one file per engine; we
+# accept the overage rather than break that invariant. Revisit if a
+# future contract growth makes splitting unavoidable.
+#
 # Implements the engine contract from `lib/engines/README.md`. Today
 # this is the only adapter; future adapters (Gemini CLI, OpenAI Codex,
 # etc.) ship as additional `lib/engines/<id>.sh` files implementing
@@ -29,6 +35,8 @@
 #   engine_run_args                 — echo full ExecStart command for systemd
 #   engine_status                   — echo JSON status object
 #   engine_uninstall                — no-op (engine binary shared across instances)
+#   engine_memory_setup             — register the claudify-memory MCP (3.4.5.2 stub; Phase 4.0b)
+#   engine_apply_persona <text>     — write a marker-bracketed persona block into CLAUDE.md
 
 # ─── Constants (engine-specific) ──────────────────────────────────────────
 # user-local npm prefix so `npm install -g` doesn't need sudo
@@ -286,4 +294,51 @@ engine_status() {
 # to clean up beyond what's already under $CLAUDIFY_ROOT".
 engine_uninstall() {
   return 0
+}
+
+# ─── Contract: engine_memory_setup ────────────────────────────────────────
+# Make the `claudify-memory` MCP visible to the engine. Idempotent.
+#
+# 3.4.5.2 stub: real implementation lands in Phase 4.0b alongside the
+# claudify-memory MCP server. For now this is a no-op so install.sh can
+# call it unconditionally without ordering hazards. The future body
+# will copy/build the MCP into $CLAUDIFY_INSTANCE_DIR/bin/ and run
+# `claude mcp add claudify-memory ...` against $CLAUDIFY_CLAUDE_DIR.
+engine_memory_setup() {
+  return 0
+}
+
+# ─── Contract: engine_apply_persona <text> ────────────────────────────────
+# Push the rendered persona snippet into Claude Code's always-loaded
+# context surface — a marker-bracketed region inside
+# ${CLAUDIFY_INSTANCE_DIR}/workspace/CLAUDE.md. The markers make this
+# idempotent: re-running with the same text leaves the file
+# byte-identical; re-running with new text replaces only the marked
+# region so operator-added text outside the block survives.
+engine_apply_persona() {
+  local rendered="$1"
+  local target="$CLAUDIFY_INSTANCE_DIR/workspace/CLAUDE.md"
+  mkdir -p "$(dirname "$target")"
+
+  local marker_start='<!-- claudify:persona:start -->'
+  local marker_end='<!-- claudify:persona:end -->'
+  local block
+  block="$(printf '%s\n%s\n%s\n' "$marker_start" "$rendered" "$marker_end")"
+
+  if [[ -s "$target" ]] && grep -q "$marker_start" "$target"; then
+    awk -v start="$marker_start" -v end="$marker_end" -v new="$block" '
+      $0 ~ start { print new; in_block=1; next }
+      in_block && $0 ~ end { in_block=0; next }
+      in_block { next }
+      { print }
+    ' "$target" > "$target.tmp" && mv "$target.tmp" "$target"
+  else
+    if [[ -s "$target" ]]; then
+      printf '%s\n\n%s\n' "$block" "$(cat "$target")" > "$target.tmp"
+      mv "$target.tmp" "$target"
+    else
+      printf '%s\n' "$block" > "$target"
+    fi
+  fi
+  chmod 644 "$target"
 }
