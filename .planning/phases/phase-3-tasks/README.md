@@ -24,17 +24,16 @@ verify done.
 | 3.4.6 | [Personal command wrapper](3.4.6-personal-cmd.md) | ⏳ pending | ~45 min | 3.4.5 | 3.4.8 |
 | 3.4.7 | [Migration logic](3.4.7-migration.md) | ⏳ pending | ~30 min | 3.4.5 | 3.4.8 |
 | 3.4.8 | [Docs sync after refactor](3.4.8-docs-sync.md) | ⏳ pending | ~30 min | 3.4.6, 3.4.7 | 3.4.9 |
-| 3.4.9 | [Containerize Claudify (dual delivery)](3.4.9-containerize.md) | ⏳ pending | ~7 hr | 3.4.5, 3.4.8 | Phase 5 (codaki.com) |
-| 3.5 | [backup.sh + restore.sh (TS)](3.5-backup-restore.md) | ⏳ pending | ~3-4 hrs | 3.4.8 | 3.6 |
-| 3.6 | [Security hardening pass — umbrella](3.6-security.md) | ⏳ pending | ~2.75 hrs | 3.5 | — |
-| 3.6.1 | [Tier-1 hardening (always-safe)](3.6.1-tier1-hardening.md) | ⏳ pending | ~30 min | 3.5 | 3.6.2 |
-| 3.6.2 | [Filesystem write-restriction](3.6.2-fs-write-restriction.md) | ⏳ pending | ~45 min | 3.6.1 | 3.6.3 |
-| 3.6.3 | [Address families + syscall filter](3.6.3-syscall-and-network.md) | ⏳ pending | ~30 min | 3.6.2 | — |
-| 3.6.4 | [Tighten file permissions](3.6.4-file-permissions.md) | ⏳ pending | ~15 min | 3.5 | — |
-| 3.6.5 | [doctor.sh security section](3.6.5-doctor-security-section.md) | ⏳ pending | ~30 min | 3.6.1, 3.6.2, 3.6.4 | — |
-| 3.6.6 | [Security docs](3.6.6-security-docs.md) | ⏳ pending | ~15 min | 3.6.1, 3.6.2 | — |
+| 3.4.9 | [Containerize Claudify (dual delivery)](3.4.9-containerize.md) | ⏳ pending | ~7 hr | 3.4.5, 3.4.8 | Phase 7 (codaki.com) |
+| 3.5 | [backup.sh + restore.sh (TS)](3.5-backup-restore.md) | ⏳ pending | ~3-4 hrs | 3.4.8 | Phase 4 (security) |
 
-**Total estimated effort:** ~12-15 hours across multiple sessions.
+**Total estimated effort:** ~5-7 hours remaining in Phase 3 (after today's 3.4.5.1 + 3.4.5.2 ship).
+
+> Security hardening (was 3.6.x) moved to **[Phase 4](../phase-4-sec/)**
+> on 2026-05-12. Memory MCP (was Phase 4.0a-4.1.1 + 4.4) moved to
+> **[Phase 5](../phase-5-mem-mcp/)**. Non-memory items from old Phase 4
+> (DM pairing, reminders, skill marketplace) moved to **[Phase 6](../phase-6-skills/)**.
+> Each has its own folder + README with status board.
 
 > **Inserted decimal tasks** (e.g. 3.4.2.1) are small, self-contained
 > work that surfaces between numbered tasks. Used when a real UX gap

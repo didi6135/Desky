@@ -92,7 +92,7 @@ and `~/.claude.json` seed get refreshed.
 
 ### 3.3 — Seed starter `CLAUDE.md` persona (bash, ~30 min) ✅ DONE 2026-04-24
 
-> *Note:* This is technically a Phase 4 (Capabilities) item, pulled
+> *Note:* This is technically a Phase 5 (Memory) item, pulled
 > forward because it's small and makes the bot feel personal. It's what
 > turns generic Claude into *"my* Claude."
 
@@ -228,37 +228,12 @@ can be dropped onto a fresh server to rehydrate the bot.
 - [ ] First piece of TypeScript code in production use; sets the
       pattern for future TS modules
 
-### 3.6 — Security hardening pass (~2.75 hrs)
+### 3.6 — ~~Security hardening~~ MOVED to [Phase 4](phase-4-sec/) on 2026-05-12
 
-**Goal:** Two arms — systemd unit hardening (the biggest mechanical
-gap — current `systemd-analyze` exposure score is ~9.6, we want
-≤3.0), plus a code-level audit verifying that every claim in
-`docs/architecture.md §11` is true. Closes Phase 3 by making the
-unit that runs the bot match the security story we tell.
-
-**Source of truth:** [`.planning/research/security.md`](../research/security.md)
-— threat model, current state assessment, all 10 audit items, the
-hardening plan with directive-by-directive rationale.
-
-**Sub-tasks** (each commits separately, each gets a Station11
-round-trip):
-
-| # | Task | Effort | Lands |
-|---|---|---|---|
-| 3.6.1 | [Tier-1 hardening (always-safe)](phase-3-tasks/3.6.1-tier1-hardening.md) | 30 min | NoNewPrivileges, PrivateTmp, Protect{Kernel*,Clock,Hostname,ControlGroups}, RestrictNamespaces, RestrictSUIDSGID, LockPersonality, RestrictRealtime + MemoryMax/TasksMax/LimitNPROC. Score 9.6 → ~5.0. |
-| 3.6.2 | [Filesystem write-restriction](phase-3-tasks/3.6.2-fs-write-restriction.md) | 45 min | ProtectHome=read-only + ReadWritePaths=%h/.claudify %h/.claude %h/.npm-global %h/.bun. Score ~5.0 → ~3.0. |
-| 3.6.3 | [Address families + syscall filter](phase-3-tasks/3.6.3-syscall-and-network.md) | 30 min | RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 + SystemCallFilter=@system-service. Score ~3.0 → ~2.0. |
-| 3.6.4 | [Tighten file permissions](phase-3-tasks/3.6.4-file-permissions.md) | 15 min | access.json → 600, install log → 600. |
-| 3.6.5 | [doctor.sh security section](phase-3-tasks/3.6.5-doctor-security-section.md) | 30 min | Drift detection: hardening directives present, file perms, no tokens in ps. |
-| 3.6.6 | [Security documentation](phase-3-tasks/3.6.6-security-docs.md) | 15 min | README "Security" section + architecture.md §11 status flip + bypassPermissions comment in engine adapter. |
-
-**Acceptance (whole umbrella):**
-- [ ] `systemd-analyze --user security` ≤ 3.0
-- [ ] All sub-task acceptance criteria met
-- [ ] No secrets in any `ps aux` output during install or runtime
-- [ ] README has a Security section users can read
-- [ ] `docs/architecture.md §11` updated to reflect what 3.6 closed
-- [ ] CHANGELOG `### Security` entries for each sub-task
+The 6 sub-tasks live at [`phase-4-sec/`](phase-4-sec/README.md) with
+their own status board. They were renumbered `3.6.x` → `4.x`. The
+work itself is unchanged; security is now first-class trackable as
+its own phase rather than a sub-task of Phase 3.
 
 ### 3.7 — Update README + ROADMAP + status docs
 
@@ -275,7 +250,6 @@ Phase 3 is **done** when:
 - [x] `CLAUDE.md` lives in `~/.claudify/workspace/`, persists across updates, demonstrably changes bot behavior
 - [ ] Architecture refactor (3.4) lands — multi-instance layout, engine abstraction, personal commands, manifest, lib/steps.sh split, src/ + tests/ skeleton, migration from old layout
 - [ ] `backup.sh` produces a tarball; `restore.sh` rehydrates it on a fresh server; doctor passes
-- [ ] Security hardening pass (3.6) audits chmod, Environment vs EnvironmentFile, redaction, input validation; README has Security section
 - [ ] All entrypoints accept `--name`; personal command wrappers work
 - [ ] All bash files ≤ 300 lines; functions ≤ 50 lines
 - [ ] `bash test.sh` passes (bash bats + TS bun test)
@@ -286,8 +260,11 @@ Phase 3 is **done** when:
 
 ## Out of scope for Phase 3
 
-- Gmail / Calendar / Drive MCPs (Phase 4)
-- Discord / WhatsApp / email channels (Phase 4-5)
-- Cost ceiling, audit log, health check endpoint (Phase 5)
-- Multi-engine implementation (Phase 6 — only triggered per ADR 0005 conditions)
+- Security hardening (moved to [Phase 4](phase-4-sec/))
+- Memory MCP + persona + conversation log ([Phase 5](phase-5-mem-mcp/))
+- DM pairing, reminders skill, skill marketplace ([Phase 6](phase-6-skills/))
+- Cost ceiling, audit log, health check endpoint (Phase 7)
+- Gmail / Calendar / Drive MCPs (Phase 7+)
+- Discord / WhatsApp / email channels (Phase 7+)
+- Multi-engine implementation (Phase 7+ — only triggered per ADR 0005 conditions)
 - Hosted SaaS path (out of vision — see PROJECT.md non-goals)
