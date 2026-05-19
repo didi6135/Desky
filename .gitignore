@@ -42,3 +42,8 @@ npm-debug.log*
 # Bun + TS build output
 bun.lockb
 src/dist/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

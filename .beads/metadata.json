@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "Claudify",
+  "project_id": "9ed7e89f-6556-44d3-83e3-10a95955cafa"
+}
