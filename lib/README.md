@@ -32,6 +32,7 @@ single self-contained `dist/install.sh`.
 | `layout.sh` | Claudify on-disk paths (engine-agnostic) | `CLAUDIFY_ROOT`, `CLAUDIFY_WORKSPACE`, `CLAUDIFY_TELEGRAM`, `CREDS_FILE` |
 | `engine.sh` | picks the engine adapter, sources `lib/engines/<id>.sh` into scope | `CLAUDIFY_ENGINE`, `engine_id` |
 | `manifest.sh` | registry + per-instance manifest read/write helpers (jq-backed, atomic writes) | `manifest_init_registry`, `manifest_register_instance`, `manifest_unregister_instance`, `manifest_list_instances`, `manifest_get_instance`, `manifest_init_instance`, `manifest_set_channel`, `manifest_set_mcp`, `manifest_set_skill`, `manifest_get_skill_memory`, `manifest_read_field`, `manifest_atomic_write` |
+| `personal-cmd.sh` | generates `~/.local/bin/<name>` wrapper + ensures PATH in rc files (3.4.6) | `personal_cmd_install`, `personal_cmd_uninstall`, `personal_cmd_ensure_path`, `personal_cmd_clean_path` |
 | `memory.sh` | per-skill data dirs + manifest-driven write/read asserts ([`docs/skills.md §10`](../docs/skills.md)) | `memory_dir`, `memory_path`, `memory_assert_write`, `memory_assert_read`, `memory_export_env`, `CLAUDIFY_SKILL_DATA` (env var, set by `memory_export_env`) |
 | `onboarding.sh` | welcome banner + Telegram walkthroughs + resumable input collection | `intro`, `guide_botfather`, `guide_userinfobot`, `collect_inputs`, `clear_partial_state` |
 | `configs.sh` | bot `.env` + allowlist + starter persona | `write_configs`, `seed_persona` |

@@ -13,6 +13,29 @@ fresh Unreleased block goes back on top.
 
 ### Added
 
+- **Personal command wrapper at `~/.local/bin/<name>` (phase 3.4.6).**
+  After install the operator runs `<name> doctor`, `<name> update`,
+  `<name> status`, `<name> logs`, `<name> restart`, `<name> start`,
+  `<name> stop`, `<name> uninstall` directly — no more
+  `bash uninstall.sh --name <name>` boilerplate. New `lib/personal-cmd.sh`
+  (159 lines) exposes 4 helpers: `personal_cmd_install` (generates the
+  chmod-755 dispatcher), `personal_cmd_uninstall` (removes it),
+  `personal_cmd_ensure_path` (appends marker-tagged
+  `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc` and `~/.zshrc`
+  — idempotent, only when not already present), and
+  `personal_cmd_clean_path` (uninstall.sh calls this once the last
+  instance is gone to remove the marker line, per CLAUDE.md rule 10).
+  Doctor/update/uninstall subcommands re-fetch the current
+  entrypoint via `bash <(curl …)` so they always run today's version;
+  status/logs/start/stop/restart hit the local
+  `systemctl --user … claudify-<name>` directly. install.sh's final
+  summary now prints `<name> status / logs / doctor / --help` instead
+  of long `systemctl` one-liners; uninstall.sh deletes the wrapper
+  before the per-instance dir and cleans rc files when the registry
+  empties. `tests/bash/personal-cmd.bats` covers wrapper generation,
+  `--help` content, PATH idempotency, rc-file cleanup, and uninstall
+  idempotency.
+
 - **Skill data substrate (phase 3.4.5.1).** Per-skill data dirs at
   `~/.claudify-<name>/data/<skill-id>/` (mode 700, persists across
   `update.sh` and `--reset-config`; only `uninstall.sh` wipes them).

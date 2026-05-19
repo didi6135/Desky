@@ -157,11 +157,14 @@ final_summary() {
   echo
   echo "  Send a message to your bot on Telegram to test."
   echo
-  echo "  Useful commands:"
-  echo "    Status:   systemctl --user status $unit_name"
-  echo "    Logs:     journalctl --user -u $unit_name -f"
-  echo "    Stop:     systemctl --user stop $unit_name"
-  echo "    Restart:  systemctl --user restart $unit_name"
+  echo "  Run any of these (personal command at ~/.local/bin/$INSTANCE_NAME):"
+  echo "    $INSTANCE_NAME status        — service health"
+  echo "    $INSTANCE_NAME logs          — follow logs"
+  echo "    $INSTANCE_NAME doctor        — full diagnostic"
+  echo "    $INSTANCE_NAME --help        — full list of subcommands"
+  echo
+  echo "  (If '$INSTANCE_NAME: command not found' — open a new terminal"
+  echo "   or run 'source ~/.bashrc' to pick up the new PATH entry.)"
   echo
   echo "  Manifest files (what's installed):"
   echo "    Registry:       $CLAUDIFY_REGISTRY"

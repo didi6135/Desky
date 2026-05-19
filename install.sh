@@ -43,6 +43,8 @@ LIB_DIR="$SCRIPT_DIR/lib"
 #   engine.sh     — picks the engine adapter and sources lib/engines/<id>.sh
 #                   into scope (defines all engine_* contract functions)
 #   manifest.sh   — registry + per-instance manifest read/write helpers (uses jq)
+#   personal-cmd.sh — wrapper at ~/.local/bin/<name> + rc-file PATH update
+#                   (needs no other lib; called after manifest writes)
 #   memory.sh     — per-skill data dirs + ${CLAUDIFY_SKILL_DATA} resolver
 #                   (uses manifest_get_skill_memory, so must follow manifest.sh)
 #   onboarding.sh — intro, BotFather/userinfobot walkthroughs, collect_inputs
@@ -65,6 +67,8 @@ source "$LIB_DIR/preflight.sh"
 source "$LIB_DIR/engine.sh"
 # shellcheck source=lib/manifest.sh
 source "$LIB_DIR/manifest.sh"
+# shellcheck source=lib/personal-cmd.sh
+source "$LIB_DIR/personal-cmd.sh"
 # shellcheck source=lib/memory.sh
 source "$LIB_DIR/memory.sh"
 # shellcheck source=lib/onboarding.sh
@@ -134,6 +138,11 @@ main() {
   manifest_register_instance "$INSTANCE_NAME"
   manifest_init_instance     "$INSTANCE_NAME"
   manifest_set_channel       "$INSTANCE_NAME" telegram ""
+
+  # Personal command wrapper at ~/.local/bin/<INSTANCE_NAME>. After this
+  # the operator says `<name> doctor` instead of repeating long flags.
+  step "Install personal command"
+  personal_cmd_install "$INSTANCE_NAME"
 
   final_summary
 }

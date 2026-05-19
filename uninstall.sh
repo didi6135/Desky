@@ -13,9 +13,12 @@
 #   • ~/.claudify-<NAME>/ (ALL per-instance state: tokens, workspace,
 #                         persona, channels, MCPs, skills, hooks, data,
 #                         per-instance Claude state)
+#   • ~/.local/bin/<NAME> (the personal command wrapper)
 #   • the instance's entry in ~/.claudify-registry.json
 #
-# Removing the LAST instance also removes ~/.claudify-registry.json.
+# Removing the LAST instance also removes ~/.claudify-registry.json AND
+# the `# Claudify PATH —` marker line + its export from ~/.bashrc and
+# ~/.zshrc (no orphaned env state per CLAUDE.md rule 10).
 #
 # What stays (the operator may have other uses — remove manually if desired):
 #   • ~/.bun/                      Bun runtime
@@ -174,6 +177,7 @@ for name in "${INSTANCES[@]}"; do
   unit="claudify-${name}.service"
   unit_file="$HOME/.config/systemd/user/${unit}"
   inst_dir="$HOME/.claudify-${name}"
+  pcmd_path="$HOME/.local/bin/${name}"
 
   echo
   c_bold "  ── $name ──"
@@ -194,14 +198,22 @@ for name in "${INSTANCES[@]}"; do
     skip "unit file already gone"
   fi
 
-  # 3. Remove the per-instance dir
+  # 3. Remove the personal command wrapper (before the instance dir so
+  # the dispatch table can't outlive the thing it dispatches to).
+  if [[ -e "$pcmd_path" || -L "$pcmd_path" ]]; then
+    rm -f "$pcmd_path" && ok "personal command removed ($pcmd_path)"
+  else
+    skip "personal command already gone"
+  fi
+
+  # 4. Remove the per-instance dir
   if [[ -d "$inst_dir" ]]; then
     rm -rf "$inst_dir" && ok "$inst_dir removed"
   else
     skip "$inst_dir already gone"
   fi
 
-  # 4. Drop the registry entry
+  # 5. Drop the registry entry
   if [[ -s "$REGISTRY" ]] && command -v jq >/dev/null 2>&1; then
     tmp="$(mktemp)"
     jq --arg n "$name" 'del(.instances[$n])' "$REGISTRY" > "$tmp" && mv "$tmp" "$REGISTRY"
@@ -212,11 +224,40 @@ done
 # Reload systemd once after all removals
 systemctl --user daemon-reload 2>/dev/null && ok "systemctl daemon-reload" || skip "daemon-reload skipped (no user bus)"
 
-# Empty registry → remove the file itself
+# Empty registry → remove the file itself + clean the PATH marker line
+# from rc files (no orphaned env state on full uninstall — CLAUDE.md
+# rule 10). The marker comment makes the line unambiguous to remove.
+_pcmd_clean_path_rc() {
+  local marker='# Claudify PATH —'
+  local rc tmp
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [[ -e "$rc" ]] || continue
+    grep -Fq "$marker" "$rc" || continue
+    tmp="$(mktemp)"
+    awk -v m="$marker" '
+      $0 == m                         { skip = 1; next }
+      skip == 1 && /^export PATH=.*\.local\/bin/ { skip = 0; next }
+      skip == 1                       { skip = 0 }
+      { print }
+    ' "$rc" > "$tmp"
+    mv "$tmp" "$rc"
+    ok "PATH marker removed from $(basename "$rc")"
+  done
+}
+
+REGISTRY_EMPTY=0
 if [[ -s "$REGISTRY" ]] && command -v jq >/dev/null 2>&1; then
   if [[ "$(jq -r '.instances | length' "$REGISTRY")" == "0" ]]; then
     rm -f "$REGISTRY" && ok "registry file removed (no instances left)"
+    REGISTRY_EMPTY=1
   fi
+elif [[ ! -s "$REGISTRY" ]]; then
+  # Registry already gone (or jq absent on a single-instance --all run).
+  REGISTRY_EMPTY=1
+fi
+
+if [[ "$REGISTRY_EMPTY" -eq 1 ]]; then
+  _pcmd_clean_path_rc
 fi
 
 # ─── Summary ──────────────────────────────────────────────────────────────
