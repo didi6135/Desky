@@ -13,7 +13,7 @@ fresh Unreleased block goes back on top.
 
 ### Added
 
-- **Personal command wrapper at `~/.local/bin/<name>` (phase 3.4.6).**
+- **Personal command wrapper at `~/.local/bin/<name>` (phase 3.4.6).** Round-tripped on Station11 2026-05-20: doctor 34/34 green, wrapper resolves in a fresh login shell, real `systemctl --user` reachable through `<name> status`.
   After install the operator runs `<name> doctor`, `<name> update`,
   `<name> status`, `<name> logs`, `<name> restart`, `<name> start`,
   `<name> stop`, `<name> uninstall` directly — no more

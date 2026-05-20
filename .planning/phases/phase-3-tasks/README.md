@@ -21,7 +21,7 @@ verify done.
 | 3.4.5 | [Multi-instance layout](3.4.5-multi-instance.md) | ✅ done 2026-05-11 | ~3.5 hr | 3.4.3, 3.4.4 | 3.4.5.1, 3.4.6, 3.4.7 |
 | 3.4.5.1 | [Skill data dir + lib/memory.sh](3.4.5.1-skill-data-dir.md) | ⏳ pending | ~45 min | 3.4.5 | 3.4.5.2, Phase 4 |
 | 3.4.5.2 | [Engine contract: memory_setup + apply_persona](3.4.5.2-engine-memory-contract.md) | ⏳ pending | ~30 min | 3.4.3 | Phase 4 (memory) |
-| 3.4.6 | [Personal command wrapper](3.4.6-personal-cmd.md) | ✅ done 2026-05-19 (Station11 round-trip pending) | ~45 min | 3.4.5 | 3.4.8 |
+| 3.4.6 | [Personal command wrapper](3.4.6-personal-cmd.md) | ✅ done 2026-05-20 | ~45 min | 3.4.5 | 3.4.8 |
 | 3.4.7 | [Migration logic](3.4.7-migration.md) | ⏳ pending | ~30 min | 3.4.5 | 3.4.8 |
 | 3.4.8 | [Docs sync after refactor](3.4.8-docs-sync.md) | ⏳ pending | ~30 min | 3.4.6, 3.4.7 | 3.4.9 |
 | 3.4.9 | [Containerize Claudify (dual delivery)](3.4.9-containerize.md) | ⏳ pending | ~7 hr | 3.4.5, 3.4.8 | Phase 7 (codaki.com) |
