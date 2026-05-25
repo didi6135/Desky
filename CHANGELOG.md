@@ -13,6 +13,23 @@ fresh Unreleased block goes back on top.
 
 ### Fixed
 
+- **Intermittent install crash between `start_service` and
+  `personal_cmd_install` — SIGPIPE race in `claude --version | head -1`.**
+  Under `set -o pipefail`, `head -1` closes the pipe after reading one
+  line; if `claude --version` is still writing to stdout, claude receives
+  SIGPIPE → exit 141 → the pipeline returns 141 → `set -e` halts install
+  before `manifest_init_instance` can write the per-instance manifest,
+  before `personal_cmd_install` runs, and before `final_summary` clears
+  `.install-partial`. Symptom: install log ends abruptly at
+  `✓ service is running`; registry entry exists but no per-instance
+  manifest, no `~/.local/bin/<NAME>` wrapper, `.install-partial` left
+  behind. Verified flake on Station11 2026-05-25 (happened on the
+  Claudify-e4a verification run, after working fine on 2026-05-20).
+  Fixed all 4 call sites — `manifest.sh::manifest_init_instance` plus
+  three in `engines/claude-code.sh` (`engine_install` x2, `engine_status`):
+  capture full `claude --version` output, then trim to the first line
+  via `${var%%$'\n'*}`. No pipe = no pipefail race.
+
 - **OMZ `default` shell-function collision shadowing the personal command
   wrapper (Claudify-e4a, fix for phase 3.4.6).** Oh My Zsh defines a no-op
   `default()` function in `~/.oh-my-zsh/lib/functions.zsh`. zsh resolves

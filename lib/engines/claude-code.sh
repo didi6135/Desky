@@ -172,14 +172,19 @@ engine_install() {
   step "Install Claude Code"
   _npm_prefix_setup
 
+  # Capture-then-trim instead of `| head -1` to avoid the SIGPIPE-via-pipefail
+  # race documented in lib/manifest.sh::manifest_init_instance.
+  local cv=""
   if command -v claude >/dev/null 2>&1; then
-    ok "claude already installed: $(claude --version 2>/dev/null | head -1)"
+    cv="$(claude --version 2>/dev/null)" || cv=""
+    ok "claude already installed: ${cv%%$'\n'*}"
     return 0
   fi
 
   echo "  ↓ npm install -g @anthropic-ai/claude-code"
   run "npm install -g @anthropic-ai/claude-code >/dev/null 2>&1"
-  ok_done "claude installed: $(claude --version 2>/dev/null | head -1)"
+  cv="$(claude --version 2>/dev/null)" || cv=""
+  ok_done "claude installed: ${cv%%$'\n'*}"
 }
 
 # ─── Contract: engine_seed_state <wsdir> ──────────────────────────────────
@@ -276,7 +281,9 @@ engine_run_args() {
 engine_status() {
   local version="" authed=false
   if command -v claude >/dev/null 2>&1; then
-    version="$(claude --version 2>/dev/null | head -1)"
+    # Capture-then-trim (see manifest_init_instance for the SIGPIPE story).
+    version="$(claude --version 2>/dev/null)" || version=""
+    version="${version%%$'\n'*}"
     if engine_auth_check; then
       authed=true
     fi

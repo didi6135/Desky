@@ -120,9 +120,15 @@ manifest_init_instance() {
   local now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+  # Best-effort engine version (optional). Avoid `claude --version | head -1`:
+  # under `set -o pipefail`, head closes the pipe after one line → claude
+  # gets SIGPIPE → exit 141 → set -e halts install.sh between start_service
+  # and personal_cmd_install. Verified flake on Station11 2026-05-25.
+  # Capture full output, then trim to the first line via parameter expansion.
   local engine_version=""
   if command -v claude >/dev/null 2>&1; then
-    engine_version="$(claude --version 2>/dev/null | head -1)"
+    engine_version="$(claude --version 2>/dev/null)" || engine_version=""
+    engine_version="${engine_version%%$'\n'*}"
   fi
 
   local f
