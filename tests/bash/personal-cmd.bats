@@ -112,6 +112,32 @@ teardown() {
   [[ ! -e "$HOME/.local/bin/never-installed" ]]
 }
 
+# ─── Collision check (Claudify-e4a) ───────────────────────────────────────
+@test "personal_cmd_collision_check returns 0 when no collision" {
+  personal_cmd_collision_check "totally-unique-xyz-123"
+}
+
+@test "personal_cmd_collision_check returns 1 when a PATH binary shadows the name" {
+  # 'ls' is on every system. The wrapper at $HOME/.local/bin/ls would be
+  # shadowed by /usr/bin/ls or similar — the function should detect that.
+  ! personal_cmd_collision_check "ls"
+}
+
+@test "personal_cmd_collision_check warning output mentions the offending name" {
+  run personal_cmd_collision_check "ls"
+  [[ "$output" == *"ls"* ]]
+  [[ "$output" == *"would NOT be picked up"* ]] || [[ "$output" == *"shadow"* ]]
+}
+
+@test "personal_cmd_collision_check ignores the wrapper at its OWN install path (re-install)" {
+  # If only ~/.local/bin/<name> resolves, it's a re-install of the wrapper
+  # we're about to write — not a real collision.
+  mkdir -p "$HOME/.local/bin"
+  printf '#!/usr/bin/env bash\necho hi\n' > "$HOME/.local/bin/uniqfoo"
+  chmod 755 "$HOME/.local/bin/uniqfoo"
+  PATH="$HOME/.local/bin:$PATH" personal_cmd_collision_check "uniqfoo"
+}
+
 # ─── PATH cleanup (full uninstall) ────────────────────────────────────────
 @test "personal_cmd_clean_path removes marker + export, leaves other lines" {
   cat > "$HOME/.bashrc" <<'RC'

@@ -20,11 +20,13 @@ Usage:
   bash install.sh [flags]
 
 Flags:
-  --name <NAME>       Instance name (default: 'default'). Lowercase letters,
-                      digits, _, -. 2-31 chars. Each instance lives at
-                      ~/.claudify-<NAME>/ and runs as
-                      claudify-<NAME>.service. Multiple instances coexist
-                      side-by-side, isolated by systemd mount namespaces.
+  --name <NAME>       Instance name (default: \$(whoami), e.g. 'david').
+                      Lowercase letter start, then 1-30 of [a-z0-9_-].
+                      Each instance lives at ~/.claudify-<NAME>/ and runs
+                      as claudify-<NAME>.service. Multiple instances
+                      coexist side-by-side. 'default' is blocklisted —
+                      it collides with Oh My Zsh's default() function
+                      (Claudify-e4a).
   --dry-run           Print actions without modifying the system
   --reset-config      Overwrite existing token/allowlist (default: preserve)
   --preserve-state    Update mode: reuse existing BOT_TOKEN, TG_USER_ID,
@@ -56,7 +58,7 @@ parse_args() {
           fail "--name requires a value (e.g. --name client-a)"
         fi
         if ! validate_instance_name "$2"; then
-          fail "invalid instance name '$2' — must match ^[a-z][a-z0-9_-]{1,30}\$ and not collide with common commands (ls, rm, git, claude, etc.)"
+          fail "invalid instance name '$2' — must match ^[a-z][a-z0-9_-]{1,30}\$ and not collide with common commands (ls, rm, git, claude, 'default', etc.). Try --name \$(whoami)."
         fi
         INSTANCE_NAME="$2"
         export INSTANCE_NAME

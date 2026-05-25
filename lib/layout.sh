@@ -29,7 +29,26 @@
 #   CLAUDIFY_REGISTRY         — ~/.claudify-registry.json
 #   claudify_init_layout      — (re-)compute the constants from $INSTANCE_NAME
 
-INSTANCE_NAME="${INSTANCE_NAME:-default}"
+# Default INSTANCE_NAME to the operator's Linux username (e.g. `david doctor`).
+# Personal, memorable, and almost never collides with shell functions/builtins
+# in practice. Falls back to 'claudify-bot' when whoami doesn't pass the regex
+# (system accounts, uppercase usernames, etc.) or when it would collide with
+# the validate.sh blocklist (e.g. an operator literally named 'default').
+# Operators can always override via `--name <NAME>` or `INSTANCE_NAME=<NAME>`.
+#
+# layout.sh is sourced BEFORE validate.sh in install.sh — so this guard is
+# inlined (regex + 'default' exclusion) rather than calling validate_instance_name.
+_claudify_default_instance_name() {
+  local who
+  who="$(id -un 2>/dev/null || true)"
+  if [[ "$who" =~ ^[a-z][a-z0-9_-]{1,30}$ ]] && [[ "$who" != "default" ]]; then
+    printf '%s' "$who"
+  else
+    printf '%s' "claudify-bot"
+  fi
+}
+
+INSTANCE_NAME="${INSTANCE_NAME:-$(_claudify_default_instance_name)}"
 
 claudify_init_layout() {
   CLAUDIFY_INSTANCE_DIR="$HOME/.claudify-$INSTANCE_NAME"

@@ -11,6 +11,34 @@ fresh Unreleased block goes back on top.
 
 ## [Unreleased]
 
+### Fixed
+
+- **OMZ `default` shell-function collision shadowing the personal command
+  wrapper (Claudify-e4a, fix for phase 3.4.6).** Oh My Zsh defines a no-op
+  `default()` function in `~/.oh-my-zsh/lib/functions.zsh`. zsh resolves
+  shell functions before PATH binaries, so a wrapper at
+  `~/.local/bin/default` would silently no-op for every zsh+OMZ user.
+  Three-part fix:
+  - `lib/validate.sh` now rejects `default` as an instance name. Passing
+    `--name default` fails fast at flag parse with a clear hint.
+  - `lib/layout.sh` now defaults `INSTANCE_NAME` to `$(id -un)` (the
+    operator's Linux username — e.g. `david` for the obvious wrapper
+    `david doctor`). Falls back to `claudify-bot` if the username doesn't
+    pass the regex / blocklist (system accounts, uppercase usernames,
+    operators literally named "default"). Overridable via `--name <NAME>`
+    or `INSTANCE_NAME=<NAME>` env.
+  - `lib/personal-cmd.sh` adds `personal_cmd_collision_check` — runs as a
+    non-fatal warning during install. Detects (1) PATH binaries that
+    would shadow the wrapper, and (2) zsh functions (via
+    `zsh -ic '(( \$+functions[name] ))'`) for users whose `$SHELL` is
+    zsh. Reports the conflicting source + suggests workarounds (full
+    path, `command <name>`, or `--name <other>`).
+  Tests: 4 new bats cases in `multi-instance.bats` (default-rejection +
+  whoami helper fallbacks); 4 new cases in `personal-cmd.bats` (collision
+  pass/fail + own-wrapper re-install ignore + warning message content).
+  Workaround for users on existing installs: `command <name>` or full
+  path until they re-install with `--name <other>`.
+
 ### Added
 
 - **Personal command wrapper at `~/.local/bin/<name>` (phase 3.4.6).** Round-tripped on Station11 2026-05-20: doctor 34/34 green, wrapper resolves in a fresh login shell, real `systemctl --user` reachable through `<name> status`.

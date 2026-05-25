@@ -23,16 +23,21 @@ teardown() {
 }
 
 # ─── Layout ───────────────────────────────────────────────────────────────
-@test "layout: default INSTANCE_NAME is 'default'" {
-  [[ "$INSTANCE_NAME" == "default" ]]
+@test "layout: default INSTANCE_NAME passes validate_instance_name (whoami or claudify-bot)" {
+  # Post-3.4.6 (Claudify-e4a) fix: default is whoami when valid; falls back
+  # to 'claudify-bot' for system accounts / uppercase / 'default'. Either
+  # way the value must satisfy validate_instance_name.
+  validate_instance_name "$INSTANCE_NAME"
 }
 
 @test "layout: paths follow the flat ~/.claudify-<name>/ pattern" {
-  [[ "$CLAUDIFY_INSTANCE_DIR" == "$HOME/.claudify-default" ]]
-  [[ "$CLAUDIFY_WORKSPACE"    == "$HOME/.claudify-default/workspace" ]]
-  [[ "$CLAUDIFY_TELEGRAM"     == "$HOME/.claudify-default/channels/telegram" ]]
-  [[ "$CLAUDIFY_CLAUDE_DIR"   == "$HOME/.claudify-default/claude" ]]
-  [[ "$CREDS_FILE"            == "$HOME/.claudify-default/credentials.env" ]]
+  # Use the actual INSTANCE_NAME (whoami-based now) instead of hard-coding
+  # 'default' — the structure of the paths is what we're checking.
+  [[ "$CLAUDIFY_INSTANCE_DIR" == "$HOME/.claudify-${INSTANCE_NAME}" ]]
+  [[ "$CLAUDIFY_WORKSPACE"    == "$HOME/.claudify-${INSTANCE_NAME}/workspace" ]]
+  [[ "$CLAUDIFY_TELEGRAM"     == "$HOME/.claudify-${INSTANCE_NAME}/channels/telegram" ]]
+  [[ "$CLAUDIFY_CLAUDE_DIR"   == "$HOME/.claudify-${INSTANCE_NAME}/claude" ]]
+  [[ "$CREDS_FILE"            == "$HOME/.claudify-${INSTANCE_NAME}/credentials.env" ]]
   [[ "$CLAUDIFY_REGISTRY"     == "$HOME/.claudify-registry.json" ]]
 }
 
@@ -46,10 +51,13 @@ teardown() {
 
 # ─── Validator ────────────────────────────────────────────────────────────
 @test "validate_instance_name accepts good names" {
-  validate_instance_name "default"
+  # 'default' is intentionally NOT in this list — see the dedicated
+  # rejection test below for the Claudify-e4a (OMZ collision) reason.
   validate_instance_name "client-a"
   validate_instance_name "business_2026"
   validate_instance_name "ab"
+  validate_instance_name "david"
+  validate_instance_name "claud"
 }
 
 @test "validate_instance_name rejects too-short / too-long / bad-format" {
@@ -71,6 +79,36 @@ teardown() {
   ! validate_instance_name "docker"
   ! validate_instance_name "systemctl"
   ! validate_instance_name "sudo"
+}
+
+@test "validate_instance_name rejects 'default' (Claudify-e4a — OMZ collision)" {
+  # Oh My Zsh defines a no-op default() function in ~/.oh-my-zsh/lib/functions.zsh
+  # that silently shadows ~/.local/bin/default in interactive zsh. The blocklist
+  # entry forces operators to pick a different name at install time.
+  ! validate_instance_name "default"
+}
+
+# ─── Default instance name from whoami ────────────────────────────────────
+@test "_claudify_default_instance_name returns whoami when it's a valid name" {
+  # Stub id -un to a known-good name; whoami isn't reliable on macOS+bats.
+  id() { echo "alice"; }
+  export -f id
+  result="$(_claudify_default_instance_name)"
+  [[ "$result" == "alice" ]]
+}
+
+@test "_claudify_default_instance_name falls back when whoami is uppercase" {
+  id() { echo "Alice"; }
+  export -f id
+  result="$(_claudify_default_instance_name)"
+  [[ "$result" == "claudify-bot" ]]
+}
+
+@test "_claudify_default_instance_name falls back when whoami is literally 'default'" {
+  id() { echo "default"; }
+  export -f id
+  result="$(_claudify_default_instance_name)"
+  [[ "$result" == "claudify-bot" ]]
 }
 
 # ─── Manifest path resolvers ──────────────────────────────────────────────

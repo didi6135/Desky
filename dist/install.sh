@@ -4,7 +4,7 @@
 # THIS FILE IS GENERATED. Do not edit directly.
 # Source:  https://github.com/didi6135/Claudify
 # Edit:    install.sh + lib/*.sh in the source repo, then run `bash build.sh`
-# Built:   2026-05-19T11:31:05Z
+# Built:   2026-05-25T13:12:27Z
 #
 # Usage (on a target Linux server):
 #   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
@@ -97,7 +97,26 @@ print_banner() {
 #   CLAUDIFY_REGISTRY         — ~/.claudify-registry.json
 #   claudify_init_layout      — (re-)compute the constants from $INSTANCE_NAME
 
-INSTANCE_NAME="${INSTANCE_NAME:-default}"
+# Default INSTANCE_NAME to the operator's Linux username (e.g. `david doctor`).
+# Personal, memorable, and almost never collides with shell functions/builtins
+# in practice. Falls back to 'claudify-bot' when whoami doesn't pass the regex
+# (system accounts, uppercase usernames, etc.) or when it would collide with
+# the validate.sh blocklist (e.g. an operator literally named 'default').
+# Operators can always override via `--name <NAME>` or `INSTANCE_NAME=<NAME>`.
+#
+# layout.sh is sourced BEFORE validate.sh in install.sh — so this guard is
+# inlined (regex + 'default' exclusion) rather than calling validate_instance_name.
+_claudify_default_instance_name() {
+  local who
+  who="$(id -un 2>/dev/null || true)"
+  if [[ "$who" =~ ^[a-z][a-z0-9_-]{1,30}$ ]] && [[ "$who" != "default" ]]; then
+    printf '%s' "$who"
+  else
+    printf '%s' "claudify-bot"
+  fi
+}
+
+INSTANCE_NAME="${INSTANCE_NAME:-$(_claudify_default_instance_name)}"
 
 claudify_init_layout() {
   CLAUDIFY_INSTANCE_DIR="$HOME/.claudify-$INSTANCE_NAME"
@@ -126,11 +145,13 @@ validate_bot_token() { [[ "$1" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; }
 validate_user_id()   { [[ "$1" =~ ^[0-9]+$ ]]; }
 validate_workspace() { [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]; }
 
-# Instance name (3.4.5):
+# Instance name (3.4.5, refined 3.4.6 follow-up):
 #   - regex: lowercase letter start, then 1-30 of [a-z0-9_-]; total 2-31 chars
-#   - blocklist: common Unix command names + reserved words. Avoids accidental
-#     PATH shadowing when 3.4.6 ships `~/.local/bin/<name>` as a personal
-#     command wrapper.
+#   - blocklist: common Unix command names + reserved words + the literal
+#     'default' (an Oh My Zsh function ~/.oh-my-zsh/lib/functions.zsh defines
+#     a no-op default() that shadows the wrapper at ~/.local/bin/default;
+#     Claudify-e4a). Avoids accidental shell-name shadowing of the 3.4.6
+#     personal command wrapper at ~/.local/bin/<name>.
 validate_instance_name() {
   local name="$1"
   [[ "$name" =~ ^[a-z][a-z0-9_-]{1,30}$ ]] || return 1
@@ -139,6 +160,7 @@ validate_instance_name() {
     docker|systemctl|journalctl|sudo|bash|sh|zsh|env|export|set)   return 1 ;;
     pwd|echo|test|true|false|kill|killall|ssh|scp|curl|wget)       return 1 ;;
     install|update|uninstall|doctor|backup|restore|build|help)     return 1 ;;
+    default)                                                       return 1 ;;
   esac
   return 0
 }
@@ -166,11 +188,13 @@ Usage:
   bash install.sh [flags]
 
 Flags:
-  --name <NAME>       Instance name (default: 'default'). Lowercase letters,
-                      digits, _, -. 2-31 chars. Each instance lives at
-                      ~/.claudify-<NAME>/ and runs as
-                      claudify-<NAME>.service. Multiple instances coexist
-                      side-by-side, isolated by systemd mount namespaces.
+  --name <NAME>       Instance name (default: \$(whoami), e.g. 'david').
+                      Lowercase letter start, then 1-30 of [a-z0-9_-].
+                      Each instance lives at ~/.claudify-<NAME>/ and runs
+                      as claudify-<NAME>.service. Multiple instances
+                      coexist side-by-side. 'default' is blocklisted —
+                      it collides with Oh My Zsh's default() function
+                      (Claudify-e4a).
   --dry-run           Print actions without modifying the system
   --reset-config      Overwrite existing token/allowlist (default: preserve)
   --preserve-state    Update mode: reuse existing BOT_TOKEN, TG_USER_ID,
@@ -202,7 +226,7 @@ parse_args() {
           fail "--name requires a value (e.g. --name client-a)"
         fi
         if ! validate_instance_name "$2"; then
-          fail "invalid instance name '$2' — must match ^[a-z][a-z0-9_-]{1,30}\$ and not collide with common commands (ls, rm, git, claude, etc.)"
+          fail "invalid instance name '$2' — must match ^[a-z][a-z0-9_-]{1,30}\$ and not collide with common commands (ls, rm, git, claude, 'default', etc.). Try --name \$(whoami)."
         fi
         INSTANCE_NAME="$2"
         export INSTANCE_NAME
@@ -1200,14 +1224,66 @@ manifest_read_field() {
 #   personal_cmd_uninstall <name>   — remove wrapper file (idempotent)
 #   personal_cmd_ensure_path        — add ~/.local/bin to PATH in rc files
 #   personal_cmd_clean_path         — remove the PATH line on full uninstall
+#   personal_cmd_collision_check    — warn if <name> would be shadowed by an
+#                                     existing PATH binary or zsh function
+#                                     (Claudify-e4a — OMZ default() lesson)
 
 CLAUDIFY_PATH_MARKER='# Claudify PATH —'
 CLAUDIFY_RAW_BASE='https://raw.githubusercontent.com/didi6135/Claudify/main'
 
+# personal_cmd_collision_check <name>
+#   Warn (don't fail) if invoking <name> in the operator's interactive shell
+#   would NOT reach ~/.local/bin/<name>. Two collision modes today:
+#     1. Another binary earlier in PATH (e.g. /usr/bin/<name>)
+#     2. A shell function/alias defined in the user's $SHELL (e.g. Oh My
+#        Zsh's no-op default() in ~/.oh-my-zsh/lib/functions.zsh — the
+#        original Claudify-e4a bug).
+#   Functions beat PATH in zsh, so check 2 is the load-bearing one. We only
+#   probe zsh (not bash) because bash function-shadowing of new wrappers in
+#   practice never happens — bash users rarely define functions matching
+#   short instance names, while OMZ does this by default.
+#   Returns 0 if no collision (or only colliding with our own wrapper on
+#   re-install); 1 if a real shadow was found. Prints details either way.
+personal_cmd_collision_check() {
+  local name="${1:?personal_cmd_collision_check: name required}"
+  local own_wrapper="$HOME/.local/bin/$name"
+  local collided=0
+
+  # Check 1 — PATH binary. Re-install of our own wrapper is not a collision.
+  local existing
+  if existing="$(command -v "$name" 2>/dev/null)" && [[ -n "$existing" ]]; then
+    if [[ "$existing" != "$own_wrapper" ]]; then
+      warn "name '$name' already resolves to: $existing"
+      warn "  → wrapper at $own_wrapper would NOT be picked up via bare '$name'."
+      collided=1
+    fi
+  fi
+
+  # Check 2 — zsh function (OMZ + plugins). Skip if user doesn't run zsh.
+  local shell_bin
+  shell_bin="${SHELL:-/bin/bash}"
+  if [[ "$(basename "$shell_bin")" == "zsh" ]] && command -v zsh >/dev/null 2>&1; then
+    # `(( $+functions[name] ))` is zsh-only; arithmetic, exits 0 if defined.
+    if zsh -ic "(( \$+functions[$name] ))" 2>/dev/null; then
+      warn "name '$name' is a zsh shell function (likely Oh My Zsh) — would shadow the wrapper."
+      collided=1
+    fi
+  fi
+
+  if [[ "$collided" -eq 1 ]]; then
+    warn "  Workaround: invoke via full path '$own_wrapper <cmd>' or 'command $name <cmd>'."
+    warn "  Or re-install with --name <something-else>, e.g. --name ${name}bot."
+    return 1
+  fi
+  return 0
+}
+
 # personal_cmd_install <name>
 #   Write the wrapper to ~/.local/bin/<name>, chmod 755, ensure PATH.
 #   Honours DRY_RUN. Idempotent — overwrites an existing wrapper so
-#   updates regenerate it cleanly.
+#   updates regenerate it cleanly. Runs personal_cmd_collision_check as
+#   a non-fatal warning so the operator finds out at install time, not
+#   when a confused 'foo doctor' silently no-ops in their shell weeks later.
 personal_cmd_install() {
   local name="${1:?personal_cmd_install: name required}"
   local target_dir="$HOME/.local/bin"
@@ -1216,6 +1292,7 @@ personal_cmd_install() {
   if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
     echo "  [DRY] write $target"
     echo "  [DRY] ensure ~/.local/bin in PATH (~/.bashrc, ~/.zshrc)"
+    echo "  [DRY] collision-check '$name' against PATH + user shell"
     return 0
   fi
 
@@ -1223,6 +1300,11 @@ personal_cmd_install() {
   _personal_cmd_write_wrapper "$name" > "$target"
   chmod 755 "$target"
   ok_done "personal command installed: ~/.local/bin/$name"
+
+  # Warn (don't fail) if the wrapper would be shadowed in the operator's
+  # interactive shell. They still have the wrapper at full path; this just
+  # makes the failure mode visible NOW rather than in week-3 confusion.
+  personal_cmd_collision_check "$name" || true
 
   personal_cmd_ensure_path
 
