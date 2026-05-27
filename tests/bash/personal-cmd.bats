@@ -27,9 +27,9 @@ teardown() {
   [[ -x "$HOME/.local/bin/test-x" ]]
 }
 
-@test "wrapper contains a CLAUDIFY_INSTANCE line bound to the right name" {
+@test "wrapper contains a DESKY_INSTANCE line bound to the right name" {
   personal_cmd_install "test-x"
-  grep -q '^CLAUDIFY_INSTANCE="test-x"$' "$HOME/.local/bin/test-x"
+  grep -q '^DESKY_INSTANCE="test-x"$' "$HOME/.local/bin/test-x"
 }
 
 @test "wrapper --help output mentions the instance name" {
@@ -67,7 +67,7 @@ teardown() {
 @test "personal_cmd_ensure_path appends the marker + export to .bashrc" {
   touch "$HOME/.bashrc"
   personal_cmd_ensure_path
-  grep -Fq "# Claudify PATH —" "$HOME/.bashrc"
+  grep -Fq "# Desky PATH —" "$HOME/.bashrc"
   grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"
 }
 
@@ -75,15 +75,15 @@ teardown() {
   touch "$HOME/.bashrc"
   personal_cmd_ensure_path
   personal_cmd_ensure_path
-  count="$(grep -Fc "# Claudify PATH —" "$HOME/.bashrc")"
+  count="$(grep -Fc "# Desky PATH —" "$HOME/.bashrc")"
   [[ "$count" == "1" ]]
 }
 
 @test "personal_cmd_ensure_path updates both .bashrc and .zshrc when present" {
   touch "$HOME/.bashrc" "$HOME/.zshrc"
   personal_cmd_ensure_path
-  grep -Fq "# Claudify PATH —" "$HOME/.bashrc"
-  grep -Fq "# Claudify PATH —" "$HOME/.zshrc"
+  grep -Fq "# Desky PATH —" "$HOME/.bashrc"
+  grep -Fq "# Desky PATH —" "$HOME/.zshrc"
 }
 
 @test "personal_cmd_ensure_path skips files that don't exist (no .zshrc created)" {
@@ -97,7 +97,7 @@ teardown() {
   printf 'echo hi' > "$HOME/.bashrc"   # no trailing \n
   personal_cmd_ensure_path
   grep -q '^echo hi$' "$HOME/.bashrc"
-  grep -Fq "# Claudify PATH —" "$HOME/.bashrc"
+  grep -Fq "# Desky PATH —" "$HOME/.bashrc"
 }
 
 # ─── Uninstall ────────────────────────────────────────────────────────────
@@ -143,13 +143,13 @@ teardown() {
   cat > "$HOME/.bashrc" <<'RC'
 # user line above
 alias ll='ls -la'
-# Claudify PATH —
+# Desky PATH —
 export PATH="$HOME/.local/bin:$PATH"
 # user line below
 alias gs='git status'
 RC
   personal_cmd_clean_path
-  ! grep -Fq "# Claudify PATH —" "$HOME/.bashrc"
+  ! grep -Fq "# Desky PATH —" "$HOME/.bashrc"
   ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"
   grep -q "^alias ll=" "$HOME/.bashrc"
   grep -q "^alias gs=" "$HOME/.bashrc"

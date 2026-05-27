@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# doctor.sh — diagnose a Claudify install on the server it runs on.
+# doctor.sh — diagnose a Desky install on the server it runs on.
 #
 # Usage (from the target server):
 #   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/doctor.sh)
@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
     --all)  ALL=1; shift ;;
     -h|--help)
       cat <<HELP
-Claudify doctor.sh
+Desky doctor.sh
 
 Usage:
   bash doctor.sh                  Pick from registry, or 'default' if alone
@@ -54,7 +54,7 @@ HELP
   esac
 done
 
-REGISTRY_FILE="$HOME/.claudify-registry.json"
+REGISTRY_FILE="$HOME/.desky-registry.json"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export PATH="$HOME/.bun/bin:$HOME/.npm-global/bin:$PATH"
@@ -86,7 +86,7 @@ fi
 
 # ─── Banner ───────────────────────────────────────────────────────────────
 c_bold "╭────────────────────────────────────────────────────────────╮"
-c_bold "│                  Claudify  —  doctor                       │"
+c_bold "│                  Desky  —  doctor                       │"
 c_bold "╰────────────────────────────────────────────────────────────╯"
 
 # ─── Per-host checks (run once) ───────────────────────────────────────────
@@ -95,7 +95,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   check "Linux host ($(uname -m))" 0
 else
   check "Not Linux — this server cannot host the bot" 1 \
-    "Claudify installs require a Linux server with systemd."
+    "Desky installs require a Linux server with systemd."
 fi
 if [[ -r /etc/os-release ]]; then
   # shellcheck disable=SC1091
@@ -122,13 +122,13 @@ fi
 # ─── Per-instance checks ──────────────────────────────────────────────────
 check_instance() {
   local name="$1"
-  local instance_dir="$HOME/.claudify-$name"
+  local instance_dir="$HOME/.desky-$name"
   local workspace="$instance_dir/workspace"
   local telegram="$instance_dir/channels/telegram"
   local creds="$instance_dir/credentials.env"
   local claude_dir="$instance_dir/claude"
-  local manifest="$instance_dir/claudify.json"
-  local unit_name="claudify-$name"
+  local manifest="$instance_dir/desky.json"
+  local unit_name="desky-$name"
   local unit_file="$HOME/.config/systemd/user/${unit_name}.service"
 
   # Load OAuth token for claude auth checks
@@ -184,12 +184,12 @@ check_instance() {
     if jq -e 'has("name") and has("engine") and has("channels")' "$manifest" >/dev/null 2>&1; then
       iname=$(jq -r '.name' "$manifest"); iengine=$(jq -r '.engine' "$manifest")
       n_ch=$(jq '.channels | length' "$manifest")
-      check "claudify.json valid (name=$iname, engine=$iengine, $n_ch channel(s))" 0
+      check "desky.json valid (name=$iname, engine=$iengine, $n_ch channel(s))" 0
     else
-      check "claudify.json missing required fields" 1 "Re-run install.sh --name $name"
+      check "desky.json missing required fields" 1 "Re-run install.sh --name $name"
     fi
   else
-    check "claudify.json missing" 1 "Re-run install.sh --name $name"
+    check "desky.json missing" 1 "Re-run install.sh --name $name"
   fi
 
   # Per-instance Claude state (CLAUDE_CONFIG_DIR target)
@@ -220,10 +220,10 @@ check_instance() {
   # Systemd unit
   if [[ -f "$unit_file" ]]; then
     check "unit file present ($unit_name.service)" 0
-    grep -q "^EnvironmentFile=-%h/.claudify-${name}/credentials.env" "$unit_file" \
+    grep -q "^EnvironmentFile=-%h/.desky-${name}/credentials.env" "$unit_file" \
       && check "unit references the per-instance credentials.env" 0 \
       || check "unit EnvironmentFile mismatch" 2 "Re-run install.sh --name $name"
-    grep -q "^Environment=CLAUDE_CONFIG_DIR=%h/.claudify-${name}/claude" "$unit_file" \
+    grep -q "^Environment=CLAUDE_CONFIG_DIR=%h/.desky-${name}/claude" "$unit_file" \
       && check "unit sets CLAUDE_CONFIG_DIR per-instance" 0 \
       || check "unit missing CLAUDE_CONFIG_DIR" 2 "Re-run install.sh --name $name"
     # Tier-1 hardening (the directives that actually work on Ubuntu 24.04 user-mode)

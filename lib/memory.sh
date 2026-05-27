@@ -1,9 +1,9 @@
-# lib/memory.sh — per-skill data dirs + ${CLAUDIFY_SKILL_DATA}
+# lib/memory.sh — per-skill data dirs + ${DESKY_SKILL_DATA}
 #
 # Skill storage substrate, ahead of any actual skill. Two responsibilities:
 #
 # 1. Resolve a per-skill, mode-700 data directory under
-#    ${CLAUDIFY_INSTANCE_DIR}/data/<skill-id>/. Different skill, different
+#    ${DESKY_INSTANCE_DIR}/data/<skill-id>/. Different skill, different
 #    path — file-level isolation, no broker, no daemon. Matches Anthropic's
 #    ${CLAUDE_PLUGIN_DATA} convention so cross-ecosystem skills work.
 #
@@ -12,9 +12,9 @@
 #    typos in db names, not adversaries.
 #
 # Storage substrate persists across update.sh and --reset-config; only
-# uninstall.sh wipes ${CLAUDIFY_INSTANCE_DIR}.
+# uninstall.sh wipes ${DESKY_INSTANCE_DIR}.
 #
-# Layout constants come from lib/layout.sh (CLAUDIFY_INSTANCE_DIR,
+# Layout constants come from lib/layout.sh (DESKY_INSTANCE_DIR,
 # INSTANCE_NAME). Manifest helpers come from lib/manifest.sh
 # (manifest_get_skill_memory). No engine coupling.
 #
@@ -23,10 +23,10 @@
 #   memory_path <skill-id> <filename>      — echo "<memory_dir>/<filename>"
 #   memory_assert_write <skill-id> <db>    — non-zero if memory.writes lacks <db>
 #   memory_assert_read  <skill-id> <db>    — non-zero if memory.reads  lacks <db>
-#   memory_export_env <skill-id>           — export CLAUDIFY_SKILL_DATA=<memory_dir>
+#   memory_export_env <skill-id>           — export DESKY_SKILL_DATA=<memory_dir>
 
 _memory_root() {
-  printf '%s/data' "$CLAUDIFY_INSTANCE_DIR"
+  printf '%s/data' "$DESKY_INSTANCE_DIR"
 }
 
 memory_dir() {
@@ -81,6 +81,6 @@ memory_assert_read() {
 
 memory_export_env() {
   local skill_id="${1:?memory_export_env: skill-id required}"
-  CLAUDIFY_SKILL_DATA="$(memory_dir "$skill_id")"
-  export CLAUDIFY_SKILL_DATA
+  DESKY_SKILL_DATA="$(memory_dir "$skill_id")"
+  export DESKY_SKILL_DATA
 }

@@ -29,11 +29,11 @@ single self-contained `dist/install.sh`.
 | `prompts.sh` | TTY-safe interactive prompts | `detect_tty`, `ask`, `ask_secret`, `ask_validated`, `ask_secret_validated`, `ask_yn`, `wait_enter`, `TTY_DEV` |
 | `validate.sh` | input format validators | `validate_bot_token`, `validate_user_id`, `validate_workspace` |
 | `preflight.sh` | pre-install checks + auto-install of missing deps | `preflight_os`, `preflight_prereqs`, `preflight_linger`, `offer_apt_install`, `install_node` |
-| `layout.sh` | Claudify on-disk paths (engine-agnostic) | `CLAUDIFY_ROOT`, `CLAUDIFY_WORKSPACE`, `CLAUDIFY_TELEGRAM`, `CREDS_FILE` |
-| `engine.sh` | picks the engine adapter, sources `lib/engines/<id>.sh` into scope | `CLAUDIFY_ENGINE`, `engine_id` |
+| `layout.sh` | Desky on-disk paths (engine-agnostic) | `DESKY_ROOT`, `DESKY_WORKSPACE`, `DESKY_TELEGRAM`, `CREDS_FILE` |
+| `engine.sh` | picks the engine adapter, sources `lib/engines/<id>.sh` into scope | `DESKY_ENGINE`, `engine_id` |
 | `manifest.sh` | registry + per-instance manifest read/write helpers (jq-backed, atomic writes) | `manifest_init_registry`, `manifest_register_instance`, `manifest_unregister_instance`, `manifest_list_instances`, `manifest_get_instance`, `manifest_init_instance`, `manifest_set_channel`, `manifest_set_mcp`, `manifest_set_skill`, `manifest_get_skill_memory`, `manifest_read_field`, `manifest_atomic_write` |
 | `personal-cmd.sh` | generates `~/.local/bin/<name>` wrapper + ensures PATH in rc files (3.4.6) | `personal_cmd_install`, `personal_cmd_uninstall`, `personal_cmd_ensure_path`, `personal_cmd_clean_path` |
-| `memory.sh` | per-skill data dirs + manifest-driven write/read asserts ([`docs/skills.md §10`](../docs/skills.md)) | `memory_dir`, `memory_path`, `memory_assert_write`, `memory_assert_read`, `memory_export_env`, `CLAUDIFY_SKILL_DATA` (env var, set by `memory_export_env`) |
+| `memory.sh` | per-skill data dirs + manifest-driven write/read asserts ([`docs/skills.md §10`](../docs/skills.md)) | `memory_dir`, `memory_path`, `memory_assert_write`, `memory_assert_read`, `memory_export_env`, `DESKY_SKILL_DATA` (env var, set by `memory_export_env`) |
 | `onboarding.sh` | welcome banner + Telegram walkthroughs + resumable input collection | `intro`, `guide_botfather`, `guide_userinfobot`, `collect_inputs`, `clear_partial_state` |
 | `configs.sh` | bot `.env` + allowlist + starter persona | `write_configs`, `seed_persona` |
 | `service.sh` | systemd user unit + start + final summary | `write_service`, `start_service`, `final_summary` (uses `engine_run_args`) |
@@ -43,7 +43,7 @@ single self-contained `dist/install.sh`.
 ## When to split a module further
 
 Hard limits: ≤300 lines per file, ≤50 lines per function (per
-`CLAUDIFY/CLAUDE.md` rule 1). When a file approaches the file limit,
+`DESKY/CLAUDE.md` rule 1). When a file approaches the file limit,
 or grows two distinct concerns, split it into a new `lib/<name>.sh`
 and update both `install.sh` (source order) and `build.sh` (MODULES
 array). The 3.4.2 split of the old `steps.sh` is the canonical

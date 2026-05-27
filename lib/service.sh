@@ -1,15 +1,15 @@
 # lib/service.sh — systemd user unit + service start + final summary
 #
-# Per-instance unit name: claudify-<INSTANCE_NAME>.service
+# Per-instance unit name: desky-<INSTANCE_NAME>.service
 # Per ADR 0006: bot runs in a private mount namespace where only its
-# own ~/.claudify-<name>/ folder is visible. Cross-instance reads
+# own ~/.desky-<name>/ folder is visible. Cross-instance reads
 # kernel-blocked.
 #
 # The ExecStart command line comes from `engine_run_args` (engine
 # adapter — 3.4.3). Today's only adapter is Claude Code, which wraps
 # the run in /usr/bin/script for a real PTY.
 #
-# Constants `CLAUDIFY_INSTANCE_DIR`, `CLAUDIFY_WORKSPACE`, etc. come
+# Constants `DESKY_INSTANCE_DIR`, `DESKY_WORKSPACE`, etc. come
 # from lib/layout.sh. INSTANCE_NAME comes from lib/layout.sh /
 # args.sh (--name override).
 #
@@ -17,10 +17,10 @@
 #   write_service    — write + enable user systemd unit (idempotent)
 #   start_service    — restart + verify it stayed up after 3 s
 #   final_summary    — congratulatory output + useful commands
-#   service_unit_name — echoes "claudify-<INSTANCE_NAME>"
+#   service_unit_name — echoes "desky-<INSTANCE_NAME>"
 
 service_unit_name() {
-  printf 'claudify-%s' "$INSTANCE_NAME"
+  printf 'desky-%s' "$INSTANCE_NAME"
 }
 
 # ─── systemd user service ─────────────────────────────────────────────────
@@ -33,7 +33,7 @@ write_service() {
   local svc_path="$svc_dir/${unit_name}.service"
 
   run "mkdir -p '$svc_dir'"
-  run "mkdir -p '$CLAUDIFY_WORKSPACE'"
+  run "mkdir -p '$DESKY_WORKSPACE'"
 
   # Engine decides the ExecStart line — Claude Code wraps in script(1)
   # for a real PTY; future engines may do something else.
@@ -45,24 +45,24 @@ write_service() {
   else
     cat > "$svc_path" <<SVC
 [Unit]
-Description=Claudify — Telegram bot ($INSTANCE_NAME)
+Description=Desky — Telegram bot ($INSTANCE_NAME)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# All per-instance state lives under ~/.claudify-${INSTANCE_NAME}/.
+# All per-instance state lives under ~/.desky-${INSTANCE_NAME}/.
 # Leading '-' on EnvironmentFile makes it optional so the unit can be
 # written before oauth_setup populates credentials.env.
-EnvironmentFile=-%h/.claudify-${INSTANCE_NAME}/credentials.env
+EnvironmentFile=-%h/.desky-${INSTANCE_NAME}/credentials.env
 Environment=PATH=%h/.bun/bin:%h/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=HOME=%h
 Environment=TERM=xterm-256color
-Environment=TELEGRAM_STATE_DIR=%h/.claudify-${INSTANCE_NAME}/channels/telegram
-Environment=CLAUDIFY_INSTANCE_NAME=${INSTANCE_NAME}
-Environment=CLAUDIFY_INSTANCE_DIR=%h/.claudify-${INSTANCE_NAME}
-Environment=CLAUDE_CONFIG_DIR=%h/.claudify-${INSTANCE_NAME}/claude
-WorkingDirectory=%h/.claudify-${INSTANCE_NAME}/workspace
+Environment=TELEGRAM_STATE_DIR=%h/.desky-${INSTANCE_NAME}/channels/telegram
+Environment=DESKY_INSTANCE_NAME=${INSTANCE_NAME}
+Environment=DESKY_INSTANCE_DIR=%h/.desky-${INSTANCE_NAME}
+Environment=CLAUDE_CONFIG_DIR=%h/.desky-${INSTANCE_NAME}/claude
+WorkingDirectory=%h/.desky-${INSTANCE_NAME}/workspace
 
 # === Tier-1 hardening (3.6.1) ===
 # Only the directives that work in user-mode systemd on Ubuntu 24.04
@@ -152,7 +152,7 @@ final_summary() {
   unit_name="$(service_unit_name)"
 
   c_green "╭────────────────────────────────────────────────────────────╮"
-  banner_line "Claudify  —  install complete ($INSTANCE_NAME)" "\033[32m"
+  banner_line "Desky  —  install complete ($INSTANCE_NAME)" "\033[32m"
   c_green "╰────────────────────────────────────────────────────────────╯"
   echo
   echo "  Send a message to your bot on Telegram to test."
@@ -167,8 +167,8 @@ final_summary() {
   echo "   or run 'source ~/.bashrc' to pick up the new PATH entry.)"
   echo
   echo "  Manifest files (what's installed):"
-  echo "    Registry:       $CLAUDIFY_REGISTRY"
-  echo "    This instance:  $CLAUDIFY_INSTANCE_DIR/claudify.json"
+  echo "    Registry:       $DESKY_REGISTRY"
+  echo "    This instance:  $DESKY_INSTANCE_DIR/desky.json"
   echo
   echo "  Install log: $LOG_FILE"
   echo

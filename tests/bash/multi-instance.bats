@@ -23,30 +23,30 @@ teardown() {
 }
 
 # ─── Layout ───────────────────────────────────────────────────────────────
-@test "layout: default INSTANCE_NAME passes validate_instance_name (whoami or claudify-bot)" {
+@test "layout: default INSTANCE_NAME passes validate_instance_name (whoami or desky-bot)" {
   # Post-3.4.6 (Claudify-e4a) fix: default is whoami when valid; falls back
-  # to 'claudify-bot' for system accounts / uppercase / 'default'. Either
+  # to 'desky-bot' for system accounts / uppercase / 'default'. Either
   # way the value must satisfy validate_instance_name.
   validate_instance_name "$INSTANCE_NAME"
 }
 
-@test "layout: paths follow the flat ~/.claudify-<name>/ pattern" {
+@test "layout: paths follow the flat ~/.desky-<name>/ pattern" {
   # Use the actual INSTANCE_NAME (whoami-based now) instead of hard-coding
   # 'default' — the structure of the paths is what we're checking.
-  [[ "$CLAUDIFY_INSTANCE_DIR" == "$HOME/.claudify-${INSTANCE_NAME}" ]]
-  [[ "$CLAUDIFY_WORKSPACE"    == "$HOME/.claudify-${INSTANCE_NAME}/workspace" ]]
-  [[ "$CLAUDIFY_TELEGRAM"     == "$HOME/.claudify-${INSTANCE_NAME}/channels/telegram" ]]
-  [[ "$CLAUDIFY_CLAUDE_DIR"   == "$HOME/.claudify-${INSTANCE_NAME}/claude" ]]
-  [[ "$CREDS_FILE"            == "$HOME/.claudify-${INSTANCE_NAME}/credentials.env" ]]
-  [[ "$CLAUDIFY_REGISTRY"     == "$HOME/.claudify-registry.json" ]]
+  [[ "$DESKY_INSTANCE_DIR" == "$HOME/.desky-${INSTANCE_NAME}" ]]
+  [[ "$DESKY_WORKSPACE"    == "$HOME/.desky-${INSTANCE_NAME}/workspace" ]]
+  [[ "$DESKY_TELEGRAM"     == "$HOME/.desky-${INSTANCE_NAME}/channels/telegram" ]]
+  [[ "$DESKY_CLAUDE_DIR"   == "$HOME/.desky-${INSTANCE_NAME}/claude" ]]
+  [[ "$CREDS_FILE"            == "$HOME/.desky-${INSTANCE_NAME}/credentials.env" ]]
+  [[ "$DESKY_REGISTRY"     == "$HOME/.desky-registry.json" ]]
 }
 
-@test "layout: claudify_init_layout picks up INSTANCE_NAME override" {
+@test "layout: desky_init_layout picks up INSTANCE_NAME override" {
   INSTANCE_NAME="client-a"
-  claudify_init_layout
-  [[ "$CLAUDIFY_INSTANCE_DIR" == "$HOME/.claudify-client-a" ]]
-  [[ "$CLAUDIFY_WORKSPACE"    == "$HOME/.claudify-client-a/workspace" ]]
-  [[ "$CLAUDIFY_TELEGRAM"     == "$HOME/.claudify-client-a/channels/telegram" ]]
+  desky_init_layout
+  [[ "$DESKY_INSTANCE_DIR" == "$HOME/.desky-client-a" ]]
+  [[ "$DESKY_WORKSPACE"    == "$HOME/.desky-client-a/workspace" ]]
+  [[ "$DESKY_TELEGRAM"     == "$HOME/.desky-client-a/channels/telegram" ]]
 }
 
 # ─── Validator ────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ teardown() {
   ! validate_instance_name "rm"
   ! validate_instance_name "git"
   ! validate_instance_name "claude"
-  ! validate_instance_name "claudify"
+  ! validate_instance_name "desky"
   ! validate_instance_name "docker"
   ! validate_instance_name "systemctl"
   ! validate_instance_name "sudo"
@@ -89,62 +89,62 @@ teardown() {
 }
 
 # ─── Default instance name from whoami ────────────────────────────────────
-@test "_claudify_default_instance_name returns whoami when it's a valid name" {
+@test "_desky_default_instance_name returns whoami when it's a valid name" {
   # Stub id -un to a known-good name; whoami isn't reliable on macOS+bats.
   id() { echo "alice"; }
   export -f id
-  result="$(_claudify_default_instance_name)"
+  result="$(_desky_default_instance_name)"
   [[ "$result" == "alice" ]]
 }
 
-@test "_claudify_default_instance_name falls back when whoami is uppercase" {
+@test "_desky_default_instance_name falls back when whoami is uppercase" {
   id() { echo "Alice"; }
   export -f id
-  result="$(_claudify_default_instance_name)"
-  [[ "$result" == "claudify-bot" ]]
+  result="$(_desky_default_instance_name)"
+  [[ "$result" == "desky-bot" ]]
 }
 
-@test "_claudify_default_instance_name falls back when whoami is literally 'default'" {
+@test "_desky_default_instance_name falls back when whoami is literally 'default'" {
   id() { echo "default"; }
   export -f id
-  result="$(_claudify_default_instance_name)"
-  [[ "$result" == "claudify-bot" ]]
+  result="$(_desky_default_instance_name)"
+  [[ "$result" == "desky-bot" ]]
 }
 
 # ─── Manifest path resolvers ──────────────────────────────────────────────
 @test "manifest: _registry_path is at \$HOME root, not nested" {
   result="$(_registry_path)"
-  [[ "$result" == "$HOME/.claudify-registry.json" ]]
+  [[ "$result" == "$HOME/.desky-registry.json" ]]
 }
 
 @test "manifest: _instance_manifest_path uses flat layout" {
   result="$(_instance_manifest_path "client-a")"
-  [[ "$result" == "$HOME/.claudify-client-a/claudify.json" ]]
+  [[ "$result" == "$HOME/.desky-client-a/desky.json" ]]
 }
 
 @test "manifest: registers two instances side by side" {
-  INSTANCE_NAME="alpha"; claudify_init_layout
+  INSTANCE_NAME="alpha"; desky_init_layout
   manifest_register_instance alpha
   manifest_init_instance alpha
 
-  INSTANCE_NAME="beta"; claudify_init_layout
+  INSTANCE_NAME="beta"; desky_init_layout
   manifest_register_instance beta
   manifest_init_instance beta
 
   # Registry
-  [[ -s "$HOME/.claudify-registry.json" ]]
-  result="$(jq -r '.instances | keys | sort | join(",")' "$HOME/.claudify-registry.json")"
+  [[ -s "$HOME/.desky-registry.json" ]]
+  result="$(jq -r '.instances | keys | sort | join(",")' "$HOME/.desky-registry.json")"
   [[ "$result" == "alpha,beta" ]]
 
   # Per-instance manifests
-  [[ -s "$HOME/.claudify-alpha/claudify.json" ]]
-  [[ -s "$HOME/.claudify-beta/claudify.json"  ]]
+  [[ -s "$HOME/.desky-alpha/desky.json" ]]
+  [[ -s "$HOME/.desky-beta/desky.json"  ]]
 
   # Service unit names are per-instance
-  alpha_svc="$(jq -r '.instances.alpha.service' "$HOME/.claudify-registry.json")"
-  beta_svc="$(jq -r '.instances.beta.service'  "$HOME/.claudify-registry.json")"
-  [[ "$alpha_svc" == "claudify-alpha" ]]
-  [[ "$beta_svc"  == "claudify-beta" ]]
+  alpha_svc="$(jq -r '.instances.alpha.service' "$HOME/.desky-registry.json")"
+  beta_svc="$(jq -r '.instances.beta.service'  "$HOME/.desky-registry.json")"
+  [[ "$alpha_svc" == "desky-alpha" ]]
+  [[ "$beta_svc"  == "desky-beta" ]]
 }
 
 @test "manifest: uninstalling one instance leaves the other" {
@@ -152,6 +152,6 @@ teardown() {
   manifest_register_instance beta
   manifest_unregister_instance alpha
 
-  result="$(jq -r '.instances | keys | join(",")' "$HOME/.claudify-registry.json")"
+  result="$(jq -r '.instances | keys | join(",")' "$HOME/.desky-registry.json")"
   [[ "$result" == "beta" ]]
 }

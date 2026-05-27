@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claudify install.sh — bootstrap Claude Code + Telegram on this Linux server
+# desky install.sh — bootstrap Claude Code + Telegram on this Linux server
 #
 # Usage (target server, after SSH'ing in):
 #   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
@@ -32,12 +32,12 @@ LIB_DIR="$SCRIPT_DIR/lib"
 
 # Order matters:
 #   ui.sh         — opens the log file, defines colors and ok/warn/fail
-#   layout.sh     — INSTANCE_NAME-aware paths (~/.claudify-<name>/...)
+#   layout.sh     — INSTANCE_NAME-aware paths (~/.desky-<name>/...)
 #                   sourced BEFORE args.sh because args.sh::parse_args calls
-#                   claudify_init_layout to refresh paths after --name parsing
+#                   desky_init_layout to refresh paths after --name parsing
 #   validate.sh   — pure validators (validate_instance_name lives here)
 #   args.sh       — parse_args + run() (depends on fail, validate_instance_name,
-#                                       claudify_init_layout)
+#                                       desky_init_layout)
 #   prompts.sh    — TTY detect + ask family (depends on fail)
 #   preflight.sh  — uses ui + prompts
 #   engine.sh     — picks the engine adapter and sources lib/engines/<id>.sh
@@ -45,7 +45,7 @@ LIB_DIR="$SCRIPT_DIR/lib"
 #   manifest.sh   — registry + per-instance manifest read/write helpers (uses jq)
 #   personal-cmd.sh — wrapper at ~/.local/bin/<name> + rc-file PATH update
 #                   (needs no other lib; called after manifest writes)
-#   memory.sh     — per-skill data dirs + ${CLAUDIFY_SKILL_DATA} resolver
+#   memory.sh     — per-skill data dirs + ${DESKY_SKILL_DATA} resolver
 #                   (uses manifest_get_skill_memory, so must follow manifest.sh)
 #   onboarding.sh — intro, BotFather/userinfobot walkthroughs, collect_inputs
 #   configs.sh    — bot .env + access.json + workspace persona (CLAUDE.md)
@@ -82,7 +82,7 @@ source "$LIB_DIR/oauth.sh"
 
 main() {
   parse_args "$@"          # may exit on --help / --version; sets INSTANCE_NAME
-                           # and re-runs claudify_init_layout so paths reflect --name
+                           # and re-runs desky_init_layout so paths reflect --name
   setup_logging            # only after we know we're really running
   detect_tty
   print_banner
@@ -91,7 +91,7 @@ main() {
   # it now so install-time `claude` invocations (plugin install,
   # setup-token, status checks) all hit the per-instance dir and not
   # the user-wide default.
-  export CLAUDE_CONFIG_DIR="$CLAUDIFY_CLAUDE_DIR"
+  export CLAUDE_CONFIG_DIR="$DESKY_CLAUDE_DIR"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     warn "DRY-RUN — no system changes will be made"
@@ -109,14 +109,14 @@ main() {
   # known place to land.
   if [[ "$DRY_RUN" -ne 1 ]]; then
     mkdir -p \
-      "$CLAUDIFY_INSTANCE_DIR" \
-      "$CLAUDIFY_WORKSPACE" \
-      "$CLAUDIFY_TELEGRAM" \
-      "$CLAUDIFY_MCPS" \
-      "$CLAUDIFY_SKILLS" \
-      "$CLAUDIFY_HOOKS" \
-      "$CLAUDIFY_DATA" \
-      "$CLAUDIFY_CLAUDE_DIR"
+      "$DESKY_INSTANCE_DIR" \
+      "$DESKY_WORKSPACE" \
+      "$DESKY_TELEGRAM" \
+      "$DESKY_MCPS" \
+      "$DESKY_SKILLS" \
+      "$DESKY_HOOKS" \
+      "$DESKY_DATA" \
+      "$DESKY_CLAUDE_DIR"
   fi
 
   collect_inputs           # walks user through BotFather + userinfobot
@@ -126,7 +126,7 @@ main() {
   check_bot_token_collision
 
   engine_install                                # install the engine binary
-  engine_seed_state "$CLAUDIFY_WORKSPACE"       # skip theme + trust prompts
+  engine_seed_state "$DESKY_WORKSPACE"       # skip theme + trust prompts
   engine_install_channel_plugin telegram        # marketplace + plugin
   write_configs
   write_service

@@ -6,7 +6,7 @@
 #
 # Engine selection:
 #   - Default: claude-code
-#   - Override: CLAUDIFY_ENGINE=<id> bash install.sh
+#   - Override: DESKY_ENGINE=<id> bash install.sh
 #
 # Adapters live at `lib/engines/<id>.sh` and implement the contract
 # documented in `lib/engines/README.md` (see also docs/architecture.md
@@ -17,20 +17,20 @@
 # (functions already defined).
 #
 # Exposes:
-#   CLAUDIFY_ENGINE      — engine ID (matches `lib/engines/<id>.sh`)
+#   DESKY_ENGINE      — engine ID (matches `lib/engines/<id>.sh`)
 #   engine_id            — echo the current engine ID
 
-CLAUDIFY_ENGINE="${CLAUDIFY_ENGINE:-claude-code}"
+DESKY_ENGINE="${DESKY_ENGINE:-claude-code}"
 
 engine_id() {
-  printf '%s' "$CLAUDIFY_ENGINE"
+  printf '%s' "$DESKY_ENGINE"
 }
 
 # In dev mode (sourced from install.sh), pull the adapter into scope.
 # In dist mode (sourced from the built one-file install.sh), the
 # adapter functions are already defined inline, so this is a no-op.
 if ! declare -f engine_install >/dev/null 2>&1; then
-  _adapter="${LIB_DIR:-${SCRIPT_DIR:-.}/lib}/engines/${CLAUDIFY_ENGINE}.sh"
+  _adapter="${LIB_DIR:-${SCRIPT_DIR:-.}/lib}/engines/${DESKY_ENGINE}.sh"
   if [[ ! -f "$_adapter" ]]; then
     fail "engine adapter not found: $_adapter
      Available: $(ls "${LIB_DIR:-./lib}/engines"/*.sh 2>/dev/null | xargs -rn1 basename | sed 's/\.sh$//' | tr '\n' ' ')"

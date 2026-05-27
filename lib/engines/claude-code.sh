@@ -21,7 +21,7 @@
 #   - `claude --permission-mode bypassPermissions --channels plugin:...`
 #     systemd ExecStart — wrapped in /usr/bin/script for a real PTY
 #
-# Layout constants (CLAUDIFY_ROOT etc.) come from lib/layout.sh.
+# Layout constants (DESKY_ROOT etc.) come from lib/layout.sh.
 # UI/IO helpers (step, ok, warn, fail, run, ok_done) come from lib/ui.sh
 # and lib/args.sh. TTY_DEV comes from lib/prompts.sh. LOG_FILE comes
 # from lib/ui.sh.
@@ -35,7 +35,7 @@
 #   engine_run_args                 — echo full ExecStart command for systemd
 #   engine_status                   — echo JSON status object
 #   engine_uninstall                — no-op (engine binary shared across instances)
-#   engine_memory_setup             — register the claudify-memory MCP (3.4.5.2 stub; Phase 4.0b)
+#   engine_memory_setup             — register the desky-memory MCP (3.4.5.2 stub; Phase 4.0b)
 #   engine_apply_persona <text>     — write a marker-bracketed persona block into CLAUDE.md
 
 # ─── Constants (engine-specific) ──────────────────────────────────────────
@@ -77,9 +77,9 @@ _npm_prefix_setup() {
 #   projects[<abs-path>].hasTrustDialogAccepted     (per-workspace)
 #   projects[<abs-path>].hasCompletedProjectOnboarding
 _seed_claude_json() {
-  local config="$CLAUDIFY_CLAUDE_DIR/.claude.json"
+  local config="$DESKY_CLAUDE_DIR/.claude.json"
   local wsdir="$1"
-  mkdir -p "$CLAUDIFY_CLAUDE_DIR"
+  mkdir -p "$DESKY_CLAUDE_DIR"
   local existing='{}'
   [[ -s "$config" ]] && existing=$(cat "$config")
 
@@ -100,7 +100,7 @@ _seed_claude_json() {
 # Auto-allow the telegram plugin's tools so the bot doesn't prompt the
 # operator (via Telegram!) to approve every reply/react/edit.
 _seed_settings_json() {
-  local settings="$CLAUDIFY_CLAUDE_DIR/settings.json"
+  local settings="$DESKY_CLAUDE_DIR/settings.json"
   mkdir -p "$(dirname "$settings")"
   local existing='{}'
   [[ -s "$settings" ]] && existing=$(cat "$settings")
@@ -193,12 +193,12 @@ engine_install() {
 engine_seed_state() {
   step "Seed Claude Code first-run state"
 
-  local wsdir="${1:-$CLAUDIFY_WORKSPACE}"
+  local wsdir="${1:-$DESKY_WORKSPACE}"
   mkdir -p "$wsdir"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "  [DRY] merge hasCompletedOnboarding + trust($wsdir) into $CLAUDIFY_CLAUDE_DIR/.claude.json"
-    echo "  [DRY] merge permissions.allow for telegram plugin tools into $CLAUDIFY_CLAUDE_DIR/settings.json"
+    echo "  [DRY] merge hasCompletedOnboarding + trust($wsdir) into $DESKY_CLAUDE_DIR/.claude.json"
+    echo "  [DRY] merge permissions.allow for telegram plugin tools into $DESKY_CLAUDE_DIR/settings.json"
     return 0
   fi
 
@@ -257,7 +257,7 @@ engine_auth_setup() {
   fi
 
   local capture
-  capture="$(mktemp -t claudify-oauth-XXXXXX)"
+  capture="$(mktemp -t desky-oauth-XXXXXX)"
   chmod 600 "$capture"
 
   _run_setup_token   "$capture"
@@ -295,22 +295,22 @@ engine_status() {
 
 # ─── Contract: engine_uninstall ───────────────────────────────────────────
 # No-op for Claude Code: the binary lives at ~/.npm-global/bin/claude
-# and is shared across all Claudify instances on this host. Per-bot
-# state under $CLAUDIFY_ROOT is removed by uninstall.sh's `rm -rf`,
-# not by us. Returning 0 means "engine has nothing claudify-specific
-# to clean up beyond what's already under $CLAUDIFY_ROOT".
+# and is shared across all Desky instances on this host. Per-bot
+# state under $DESKY_ROOT is removed by uninstall.sh's `rm -rf`,
+# not by us. Returning 0 means "engine has nothing desky-specific
+# to clean up beyond what's already under $DESKY_ROOT".
 engine_uninstall() {
   return 0
 }
 
 # ─── Contract: engine_memory_setup ────────────────────────────────────────
-# Make the `claudify-memory` MCP visible to the engine. Idempotent.
+# Make the `desky-memory` MCP visible to the engine. Idempotent.
 #
 # 3.4.5.2 stub: real implementation lands in Phase 4.0b alongside the
-# claudify-memory MCP server. For now this is a no-op so install.sh can
+# desky-memory MCP server. For now this is a no-op so install.sh can
 # call it unconditionally without ordering hazards. The future body
-# will copy/build the MCP into $CLAUDIFY_INSTANCE_DIR/bin/ and run
-# `claude mcp add claudify-memory ...` against $CLAUDIFY_CLAUDE_DIR.
+# will copy/build the MCP into $DESKY_INSTANCE_DIR/bin/ and run
+# `claude mcp add desky-memory ...` against $DESKY_CLAUDE_DIR.
 engine_memory_setup() {
   return 0
 }
@@ -318,17 +318,17 @@ engine_memory_setup() {
 # ─── Contract: engine_apply_persona <text> ────────────────────────────────
 # Push the rendered persona snippet into Claude Code's always-loaded
 # context surface — a marker-bracketed region inside
-# ${CLAUDIFY_INSTANCE_DIR}/workspace/CLAUDE.md. The markers make this
+# ${DESKY_INSTANCE_DIR}/workspace/CLAUDE.md. The markers make this
 # idempotent: re-running with the same text leaves the file
 # byte-identical; re-running with new text replaces only the marked
 # region so operator-added text outside the block survives.
 engine_apply_persona() {
   local rendered="$1"
-  local target="$CLAUDIFY_INSTANCE_DIR/workspace/CLAUDE.md"
+  local target="$DESKY_INSTANCE_DIR/workspace/CLAUDE.md"
   mkdir -p "$(dirname "$target")"
 
-  local marker_start='<!-- claudify:persona:start -->'
-  local marker_end='<!-- claudify:persona:end -->'
+  local marker_start='<!-- desky:persona:start -->'
+  local marker_end='<!-- desky:persona:end -->'
   local block
   block="$(printf '%s\n%s\n%s\n' "$marker_start" "$rendered" "$marker_end")"
 

@@ -42,7 +42,7 @@ oauth_setup() {
   c_yellow "  $(engine_id) needs a one-time OAuth login."
   echo "    A URL will appear below. Open it in a browser, log in to your"
   echo "    Claude subscription, and paste the resulting code back here."
-  echo "    Claudify will then save the long-lived token for the systemd service."
+  echo "    Desky will then save the long-lived token for the systemd service."
   echo
 
   engine_auth_setup

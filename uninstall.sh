@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# uninstall.sh — remove a Claudify instance from this server.
+# uninstall.sh — remove a Desky instance from this server.
 #
 # Usage:
 #   bash <(curl -fsSL .../uninstall.sh) --name <NAME> --yes
@@ -8,16 +8,16 @@
 #   bash uninstall.sh --help
 #
 # What gets removed (per instance):
-#   • systemd user service (claudify-<NAME>.service), stopped + disabled
-#   • ~/.config/systemd/user/claudify-<NAME>.service (the unit file)
-#   • ~/.claudify-<NAME>/ (ALL per-instance state: tokens, workspace,
+#   • systemd user service (desky-<NAME>.service), stopped + disabled
+#   • ~/.config/systemd/user/desky-<NAME>.service (the unit file)
+#   • ~/.desky-<NAME>/ (ALL per-instance state: tokens, workspace,
 #                         persona, channels, MCPs, skills, hooks, data,
 #                         per-instance Claude state)
 #   • ~/.local/bin/<NAME> (the personal command wrapper)
-#   • the instance's entry in ~/.claudify-registry.json
+#   • the instance's entry in ~/.desky-registry.json
 #
-# Removing the LAST instance also removes ~/.claudify-registry.json AND
-# the `# Claudify PATH —` marker line + its export from ~/.bashrc and
+# Removing the LAST instance also removes ~/.desky-registry.json AND
+# the `# Desky PATH —` marker line + its export from ~/.bashrc and
 # ~/.zshrc (no orphaned env state per CLAUDE.md rule 10).
 #
 # What stays (the operator may have other uses — remove manually if desired):
@@ -25,7 +25,7 @@
 #   • ~/.npm-global/               npm global prefix (where `claude` lives)
 #   • ~/.claude/                   Claude Code's host-wide state (if any
 #                                  pre-3.4.5 install left it; 3.4.5+ uses
-#                                  per-instance ~/.claudify-<name>/claude/)
+#                                  per-instance ~/.desky-<name>/claude/)
 #   • ~/.claude.json               Pre-3.4.5 host-wide state (same)
 #   • loginctl linger (if on)
 
@@ -51,7 +51,7 @@ ASSUME_YES=0
 
 show_help() {
   cat <<HELP
-Claudify uninstall.sh
+Desky uninstall.sh
 
 Usage:
   bash uninstall.sh --name <NAME>       Remove one named instance
@@ -60,9 +60,9 @@ Usage:
   bash uninstall.sh --help              This help
 
 Removes (per instance):
-  • claudify-<NAME>.service (stopped + disabled + unit file deleted)
-  • ~/.claudify-<NAME>/      (all per-instance state)
-  • that instance's entry in ~/.claudify-registry.json
+  • desky-<NAME>.service (stopped + disabled + unit file deleted)
+  • ~/.desky-<NAME>/      (all per-instance state)
+  • that instance's entry in ~/.desky-registry.json
 
 Leaves untouched:
   ~/.bun/, ~/.npm-global/, ~/.claude/ (pre-3.4.5), linger.
@@ -81,7 +81,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-REGISTRY="$HOME/.claudify-registry.json"
+REGISTRY="$HOME/.desky-registry.json"
 
 # Build the list of instances to uninstall.
 INSTANCES=()
@@ -89,8 +89,8 @@ if [[ "$ALL" -eq 1 ]]; then
   if [[ ! -s "$REGISTRY" ]]; then
     # Fall back to globbing top-level dirs.
     shopt -s nullglob
-    for d in "$HOME"/.claudify-*/; do
-      name="${d##*/.claudify-}"; name="${name%/}"
+    for d in "$HOME"/.desky-*/; do
+      name="${d##*/.desky-}"; name="${name%/}"
       INSTANCES+=("$name")
     done
     shopt -u nullglob
@@ -99,8 +99,8 @@ if [[ "$ALL" -eq 1 ]]; then
       while IFS= read -r n; do INSTANCES+=("$n"); done < <(jq -r '.instances | keys[]' "$REGISTRY")
     else
       shopt -s nullglob
-      for d in "$HOME"/.claudify-*/; do
-        name="${d##*/.claudify-}"; name="${name%/}"
+      for d in "$HOME"/.desky-*/; do
+        name="${d##*/.desky-}"; name="${name%/}"
         INSTANCES+=("$name")
       done
       shopt -u nullglob
@@ -118,10 +118,10 @@ else
   else
     shopt -s nullglob
     found=0
-    for d in "$HOME"/.claudify-*/; do
+    for d in "$HOME"/.desky-*/; do
       [[ "$found" -eq 0 ]] && echo "Detected by directory glob:"
       found=1
-      name="${d##*/.claudify-}"; name="${name%/}"
+      name="${d##*/.desky-}"; name="${name%/}"
       echo "  • $name"
     done
     shopt -u nullglob
@@ -143,15 +143,15 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 # ─── Preview ──────────────────────────────────────────────────────────────
 c_bold "╭────────────────────────────────────────────────────────────╮"
-c_bold "│              Claudify  —  uninstall                        │"
+c_bold "│              Desky  —  uninstall                        │"
 c_bold "╰────────────────────────────────────────────────────────────╯"
 
 echo
 echo "  Will remove ${#INSTANCES[@]} instance(s):"
 for name in "${INSTANCES[@]}"; do
-  unit="claudify-${name}.service"
+  unit="desky-${name}.service"
   unit_file="$HOME/.config/systemd/user/${unit}"
-  inst_dir="$HOME/.claudify-${name}"
+  inst_dir="$HOME/.desky-${name}"
   size="?"
   [[ -d "$inst_dir" ]] && size=$(du -sh "$inst_dir" 2>/dev/null | cut -f1)
   echo "    • $name"
@@ -174,9 +174,9 @@ fi
 section "Removing"
 
 for name in "${INSTANCES[@]}"; do
-  unit="claudify-${name}.service"
+  unit="desky-${name}.service"
   unit_file="$HOME/.config/systemd/user/${unit}"
-  inst_dir="$HOME/.claudify-${name}"
+  inst_dir="$HOME/.desky-${name}"
   pcmd_path="$HOME/.local/bin/${name}"
 
   echo
@@ -228,7 +228,7 @@ systemctl --user daemon-reload 2>/dev/null && ok "systemctl daemon-reload" || sk
 # from rc files (no orphaned env state on full uninstall — CLAUDE.md
 # rule 10). The marker comment makes the line unambiguous to remove.
 _pcmd_clean_path_rc() {
-  local marker='# Claudify PATH —'
+  local marker='# Desky PATH —'
   local rc tmp
   for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
     [[ -e "$rc" ]] || continue
@@ -263,7 +263,7 @@ fi
 # ─── Summary ──────────────────────────────────────────────────────────────
 section "Done"
 
-c_green "  Claudify instance(s) removed."
+c_green "  Desky instance(s) removed."
 echo
 echo "  Left untouched (remove manually if you want a completely clean system):"
 for p in "$HOME/.bun" "$HOME/.npm-global" "$HOME/.claude" "$HOME/.claude.json"; do

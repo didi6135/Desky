@@ -51,7 +51,7 @@ mkdir -p "$OUT_DIR"
 {
   cat <<HEADER
 #!/usr/bin/env bash
-# claudify install.sh — bootstrap Claude Code + Telegram on this Linux server
+# desky install.sh — bootstrap Claude Code + Telegram on this Linux server
 #
 # THIS FILE IS GENERATED. Do not edit directly.
 # Source:  https://github.com/didi6135/Claudify

@@ -2,7 +2,7 @@
 
 Each file in this folder is **one engine adapter**. An engine is the
 underlying CLI/runtime that actually talks to an LLM (today: Claude
-Code). Claudify's entrypoints (`install.sh`, `update.sh`, etc.) call
+Code). Desky's entrypoints (`install.sh`, `update.sh`, etc.) call
 into these adapters through a fixed contract — they never reference
 `claude` or any specific binary directly.
 
@@ -22,9 +22,9 @@ Every `lib/engines/<engine-id>.sh` must define **10 functions**:
 | `engine_auth_setup` | — | Run the interactive auth flow and persist credentials to `$CREDS_FILE`. Caller (lib/oauth.sh) handles the user-facing intro and post-verification. |
 | `engine_run_args` | — | Echo the full `ExecStart=` line for the systemd unit. Each engine decides whether it needs `script(1)` wrapping (Claude Code does — its TUI requires a real PTY). |
 | `engine_status` | — | Echo a JSON object: `{"engine": "...", "version": "...", "authenticated": true/false}`. |
-| `engine_uninstall` | — | Remove engine-specific state from `~/.claudify/`. Does NOT remove the engine binary itself — that's host-wide and may be in use elsewhere. |
-| `engine_memory_setup` | — | Make the `claudify-memory` MCP visible to the engine. Idempotent. No-op for engines without an MCP layer (or, today, the Claude Code adapter — the real MCP lands in Phase 4.0b). |
-| `engine_apply_persona` | `<text>` | Push the rendered persona snippet into whatever surface the engine reads on every model session (Claude Code: a marker-bracketed block in `${CLAUDIFY_INSTANCE_DIR}/workspace/CLAUDE.md`). Idempotent — same input → byte-identical file; new input replaces only the marked region. |
+| `engine_uninstall` | — | Remove engine-specific state from `~/.desky/`. Does NOT remove the engine binary itself — that's host-wide and may be in use elsewhere. |
+| `engine_memory_setup` | — | Make the `desky-memory` MCP visible to the engine. Idempotent. No-op for engines without an MCP layer (or, today, the Claude Code adapter — the real MCP lands in Phase 4.0b). |
+| `engine_apply_persona` | `<text>` | Push the rendered persona snippet into whatever surface the engine reads on every model session (Claude Code: a marker-bracketed block in `${DESKY_INSTANCE_DIR}/workspace/CLAUDE.md`). Idempotent — same input → byte-identical file; new input replaces only the marked region. |
 
 Adapters may define private helper functions (prefix with `_`); the
 public API is exactly these 10.
@@ -33,7 +33,7 @@ public API is exactly these 10.
 
 - File: `lib/engines/<engine-id>.sh` (lowercase, kebab-case)
 - Engine ID: matches the file stem (`claude-code`, `gemini-cli`, …)
-- Selected at runtime via `CLAUDIFY_ENGINE=<id>` env var (default
+- Selected at runtime via `DESKY_ENGINE=<id>` env var (default
   `claude-code`); `lib/engine.sh` handles dispatch.
 
 ## Rules

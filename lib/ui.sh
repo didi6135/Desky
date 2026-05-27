@@ -8,7 +8,7 @@
 # No side effects on source — main() calls setup_logging() explicitly so
 # --help / --version exit cleanly without creating empty log files.
 
-LOG_FILE="${LOG_FILE:-/tmp/claudify-install-$(date +%Y%m%d-%H%M%S).log}"
+LOG_FILE="${LOG_FILE:-/tmp/desky-install-$(date +%Y%m%d-%H%M%S).log}"
 
 setup_logging() {
   exec > >(tee -a "$LOG_FILE") 2>&1
@@ -44,6 +44,6 @@ banner_line() {
 
 print_banner() {
   c_bold "╭────────────────────────────────────────────────────────────╮"
-  banner_line "Claudify install.sh  (v${SCRIPT_VERSION:-?})"
+  banner_line "Desky install.sh  (v${SCRIPT_VERSION:-?})"
   c_bold "╰────────────────────────────────────────────────────────────╯"
 }

@@ -14,7 +14,7 @@ PRESERVE_STATE=0
 
 show_help() {
   cat <<HELP
-claudify install.sh — bootstrap Claude+Telegram on this server
+desky install.sh — bootstrap Claude+Telegram on this server
 
 Usage:
   bash install.sh [flags]
@@ -22,15 +22,15 @@ Usage:
 Flags:
   --name <NAME>       Instance name (default: \$(whoami), e.g. 'david').
                       Lowercase letter start, then 1-30 of [a-z0-9_-].
-                      Each instance lives at ~/.claudify-<NAME>/ and runs
-                      as claudify-<NAME>.service. Multiple instances
+                      Each instance lives at ~/.desky-<NAME>/ and runs
+                      as desky-<NAME>.service. Multiple instances
                       coexist side-by-side. 'default' is blocklisted —
                       it collides with Oh My Zsh's default() function
                       (Claudify-e4a).
   --dry-run           Print actions without modifying the system
   --reset-config      Overwrite existing token/allowlist (default: preserve)
   --preserve-state    Update mode: reuse existing BOT_TOKEN, TG_USER_ID,
-                      OAuth token from ~/.claudify-<name>; only refresh
+                      OAuth token from ~/.desky-<name>; only refresh
                       the systemd unit + reseed claude state. No prompts.
                       Typically invoked by update.sh.
   --non-interactive   Skip all "Press ENTER" pauses and confirmation
@@ -68,7 +68,7 @@ parse_args() {
       --reset-config)    RESET_CONFIG=1 ;;
       --preserve-state)  PRESERVE_STATE=1; NON_INTERACTIVE=1 ;;  # implies non-interactive
       --non-interactive) NON_INTERACTIVE=1 ;;
-      --version)         echo "claudify $SCRIPT_VERSION"; exit 0 ;;
+      --version)         echo "desky $SCRIPT_VERSION"; exit 0 ;;
       -h|--help)         show_help; exit 0 ;;
       *)                 fail "Unknown flag: $1 (try --help)" ;;
     esac
@@ -76,7 +76,7 @@ parse_args() {
   done
 
   # Re-resolve layout paths now that INSTANCE_NAME may have changed.
-  claudify_init_layout
+  desky_init_layout
 
   # --reset-config means "start clean" — wipe the resume crumbs too,
   # otherwise we'd silently re-load a stale BOT_TOKEN the operator

@@ -11,7 +11,7 @@
 
 preflight_os() {
   step "Preflight"
-  [[ "$(uname -s)" == "Linux" ]] || fail "Not Linux. Claudify installs the bot on a Linux server."
+  [[ "$(uname -s)" == "Linux" ]] || fail "Not Linux. Desky installs the bot on a Linux server."
   ok "Linux ($(uname -m))"
 
   if [[ -r /etc/os-release ]]; then

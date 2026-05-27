@@ -1,8 +1,8 @@
 # lib/manifest.sh — registry + per-instance manifest read/write helpers
 #
 # Two JSON files are the single source of truth for "what's installed":
-#   ~/.claudify-registry.json    — side-car registry of all instances
-#   ~/.claudify-<name>/claudify.json   — per-instance manifest
+#   ~/.desky-registry.json    — side-car registry of all instances
+#   ~/.desky-<name>/desky.json   — per-instance manifest
 #
 # Per ADR 0006: flat layout, side-car registry. Each instance is fully
 # self-contained at its top-level dir; the registry is a separate file
@@ -13,8 +13,8 @@
 # half-written manifest. The worst case is "the .tmp lingers", which
 # is harmless on the next run.
 #
-# Layout constants (CLAUDIFY_REGISTRY) come from lib/layout.sh.
-# Engine ID (CLAUDIFY_ENGINE) comes from lib/engine.sh.
+# Layout constants (DESKY_REGISTRY) come from lib/layout.sh.
+# Engine ID (DESKY_ENGINE) comes from lib/engine.sh.
 # SCRIPT_VERSION comes from install.sh.
 #
 # Exposes:
@@ -31,15 +31,15 @@
 #   manifest_read_field <n> <jq>     — read one field via jq -r
 #   manifest_atomic_write <f> <body> — internal helper, exposed for tests
 
-MANIFEST_VERSION=1
+MANIFEST_VERSION=2
 
 _registry_path() {
-  printf '%s/.claudify-registry.json' "$HOME"
+  printf '%s/.desky-registry.json' "$HOME"
 }
 
 _instance_manifest_path() {
   local name="${1:-default}"
-  printf '%s/.claudify-%s/claudify.json' "$HOME" "$name"
+  printf '%s/.desky-%s/desky.json' "$HOME" "$name"
 }
 
 # Atomic file write. $1 = target path, $2 = new contents (a string).
@@ -65,8 +65,8 @@ manifest_init_registry() {
 
 manifest_register_instance() {
   local name="${1:-default}"
-  local engine="${CLAUDIFY_ENGINE:-claude-code}"
-  local service_unit="claudify-${name}"
+  local engine="${DESKY_ENGINE:-claude-code}"
+  local service_unit="desky-${name}"
   local now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -116,7 +116,7 @@ manifest_get_instance() {
 
 manifest_init_instance() {
   local name="${1:-default}"
-  local engine="${CLAUDIFY_ENGINE:-claude-code}"
+  local engine="${DESKY_ENGINE:-claude-code}"
   local now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -139,7 +139,7 @@ manifest_init_instance() {
     local merged
     merged="$(jq --arg cv "${SCRIPT_VERSION:-unknown}" \
                  --arg ev "$engine_version" '
-      .claudify_version = $cv
+      .desky_version = $cv
       | .engine_version = $ev' "$f")"
     manifest_atomic_write "$f" "$merged"
     return 0
@@ -156,7 +156,7 @@ manifest_init_instance() {
       version: $v,
       name: $name,
       created_at: $now,
-      claudify_version: $cv,
+      desky_version: $cv,
       engine: $engine,
       engine_version: $ev,
       channels: {},

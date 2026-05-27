@@ -6,13 +6,13 @@
 # WORKSPACE is no longer a separate prompt — the instance name IS the
 # workspace identifier.)
 #
-# Constants `CLAUDIFY_TELEGRAM` etc. are defined in lib/layout.sh and
+# Constants `DESKY_TELEGRAM` etc. are defined in lib/layout.sh and
 # referenced here at call time (not source time), so source order
 # between the two doesn't matter for correctness.
 #
 # Resume-from-Ctrl-C: as soon as the user finishes pasting inputs in
 # `_collect_inputs_fresh`, we drop them in
-# `~/.claudify-<name>/.install-partial` (chmod 600). On any re-run,
+# `~/.desky-<name>/.install-partial` (chmod 600). On any re-run,
 # `_load_partial_state` asks whether to resume; sourcing that file
 # fills in BOT_TOKEN / TG_USER_ID without re-pasting. The file is
 # removed on successful finish (final_summary) and on --reset-config.
@@ -28,7 +28,7 @@
 # ─── Welcome ──────────────────────────────────────────────────────────────
 intro() {
   echo
-  echo "  Welcome to Claudify."
+  echo "  Welcome to Desky."
   echo
   echo "  This installer will:"
   echo "    1. Verify and install missing system dependencies (Node.js, jq)"
@@ -82,12 +82,12 @@ guide_userinfobot() {
 
 # ─── Resume-from-Ctrl-C state ────────────────────────────────────────────
 # The file lives under the per-instance dir (resolved at call time
-# via $CLAUDIFY_INSTANCE_DIR from lib/layout.sh). Holds the bot
+# via $DESKY_INSTANCE_DIR from lib/layout.sh). Holds the bot
 # token, so chmod 600 from the moment it exists.
 PARTIAL_STATE_FILE_NAME=".install-partial"
 
 _partial_state_path() {
-  printf '%s/%s' "$CLAUDIFY_INSTANCE_DIR" "$PARTIAL_STATE_FILE_NAME"
+  printf '%s/%s' "$DESKY_INSTANCE_DIR" "$PARTIAL_STATE_FILE_NAME"
 }
 
 # Write whatever inputs are currently set to disk so a Ctrl-C from
@@ -101,7 +101,7 @@ _partial_state_path() {
 _write_partial_state() {
   local f
   f="$(_partial_state_path)"
-  mkdir -p "$CLAUDIFY_INSTANCE_DIR"
+  mkdir -p "$DESKY_INSTANCE_DIR"
   umask 077
   {
     [[ -n "${BOT_TOKEN:-}"  ]] && printf 'BOT_TOKEN=%s\n'  "$BOT_TOKEN"
@@ -194,25 +194,25 @@ clear_partial_state() {
 
 # ─── Inputs ────────────────────────────────────────────────────────────────
 # In --preserve-state mode (update.sh hot path), pull existing values
-# from ~/.claudify-<name>/channels/telegram so the operator doesn't have
+# from ~/.desky-<name>/channels/telegram so the operator doesn't have
 # to retype them. Fail loudly if --preserve-state is set but no install
 # exists to preserve.
 _collect_inputs_preserved() {
-  if [[ -z "${BOT_TOKEN:-}" && -s "$CLAUDIFY_TELEGRAM/.env" ]]; then
-    BOT_TOKEN="$(grep '^TELEGRAM_BOT_TOKEN=' "$CLAUDIFY_TELEGRAM/.env" | cut -d= -f2-)"
+  if [[ -z "${BOT_TOKEN:-}" && -s "$DESKY_TELEGRAM/.env" ]]; then
+    BOT_TOKEN="$(grep '^TELEGRAM_BOT_TOKEN=' "$DESKY_TELEGRAM/.env" | cut -d= -f2-)"
     export BOT_TOKEN
   fi
-  if [[ -z "${TG_USER_ID:-}" && -s "$CLAUDIFY_TELEGRAM/access.json" ]]; then
-    TG_USER_ID="$(jq -r '.allowFrom[0] // empty' "$CLAUDIFY_TELEGRAM/access.json" 2>/dev/null || true)"
+  if [[ -z "${TG_USER_ID:-}" && -s "$DESKY_TELEGRAM/access.json" ]]; then
+    TG_USER_ID="$(jq -r '.allowFrom[0] // empty' "$DESKY_TELEGRAM/access.json" 2>/dev/null || true)"
     export TG_USER_ID
   fi
 
   if [[ -z "${BOT_TOKEN:-}" || -z "${TG_USER_ID:-}" ]]; then
-    fail "--preserve-state but no existing config found in $CLAUDIFY_TELEGRAM.
+    fail "--preserve-state but no existing config found in $DESKY_TELEGRAM.
      For a first-time install, omit --preserve-state and run install.sh normally."
   fi
-  ok "BOT_TOKEN reused from $CLAUDIFY_TELEGRAM/.env"
-  ok "TG_USER_ID reused from $CLAUDIFY_TELEGRAM/access.json ($TG_USER_ID)"
+  ok "BOT_TOKEN reused from $DESKY_TELEGRAM/.env"
+  ok "TG_USER_ID reused from $DESKY_TELEGRAM/access.json ($TG_USER_ID)"
   ok "Instance: $INSTANCE_NAME"
 }
 
@@ -268,12 +268,12 @@ check_bot_token_collision() {
   shopt -s nullglob
   local found=()
   local env_file
-  for env_file in "$HOME"/.claudify-*/channels/telegram/.env; do
+  for env_file in "$HOME"/.desky-*/channels/telegram/.env; do
     # Skip the current instance's own file (re-runs / preserve-state).
-    [[ "$env_file" == "$CLAUDIFY_TELEGRAM/.env" ]] && continue
+    [[ "$env_file" == "$DESKY_TELEGRAM/.env" ]] && continue
     if grep -q "^TELEGRAM_BOT_TOKEN=$BOT_TOKEN\$" "$env_file" 2>/dev/null; then
-      # Extract instance name from the path: ~/.claudify-<name>/channels/...
-      local other_instance="${env_file##*/.claudify-}"
+      # Extract instance name from the path: ~/.desky-<name>/channels/...
+      local other_instance="${env_file##*/.desky-}"
       other_instance="${other_instance%%/*}"
       found+=("$other_instance")
     fi

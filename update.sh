@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# update.sh — refresh a Claudify instance to the latest main branch, in place.
+# update.sh — refresh a Desky instance to the latest main branch, in place.
 #
 # Usage (on the target server):
 #   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/update.sh)
@@ -10,7 +10,7 @@
 # What it does (per instance):
 #   Fetches the latest dist/install.sh from main and runs it with
 #   --preserve-state --non-interactive --name <NAME>. That means:
-#     • BOT_TOKEN (~/.claudify-<n>/channels/telegram/.env)   — preserved
+#     • BOT_TOKEN (~/.desky-<n>/channels/telegram/.env)   — preserved
 #     • TG_USER_ID allowlist (access.json)                    — preserved
 #     • CLAUDE_CODE_OAUTH_TOKEN (credentials.env)             — preserved
 #     • systemd unit file                                      — rewritten
@@ -21,7 +21,7 @@
 # Typically takes 10-20s on a healthy instance. No OAuth prompts, no
 # questions.
 #
-# If no Claudify install exists, this script tells you to run install.sh.
+# If no Desky install exists, this script tells you to run install.sh.
 
 set -euo pipefail
 
@@ -36,7 +36,7 @@ while [[ $# -gt 0 ]]; do
     --all) ALL=1; shift ;;
     -h|--help)
       cat <<HELP
-Claudify update.sh
+Desky update.sh
 
 Usage:
   bash update.sh                    Update the 'default' instance
@@ -53,21 +53,21 @@ HELP
   esac
 done
 
-REGISTRY="$HOME/.claudify-registry.json"
+REGISTRY="$HOME/.desky-registry.json"
 
-# Refuse if no Claudify install exists at all.
+# Refuse if no Desky install exists at all.
 if [[ ! -s "$REGISTRY" ]]; then
-  # Legacy fallback: pre-3.4.5 single-instance layout at ~/.claudify/
-  if [[ -d "$HOME/.claudify" ]]; then
-    echo "Detected pre-3.4.5 single-instance layout at ~/.claudify/."
-    echo "3.4.5 changes the layout to ~/.claudify-<name>/ — migration is the"
+  # Legacy fallback: pre-3.4.5 single-instance layout at ~/.desky/
+  if [[ -d "$HOME/.desky" ]]; then
+    echo "Detected pre-3.4.5 single-instance layout at ~/.desky/."
+    echo "3.4.5 changes the layout to ~/.desky-<name>/ — migration is the"
     echo "job of 3.4.7 (not yet released). Until then, please uninstall first:"
     echo "    bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/uninstall.sh) --yes"
     echo "Then reinstall:"
     echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash"
     exit 1
   fi
-  echo "No Claudify install found (no $REGISTRY)."
+  echo "No Desky install found (no $REGISTRY)."
   echo
   echo "This script updates an existing install. For a first-time install, run:"
   echo
@@ -82,7 +82,7 @@ DIST_URL="https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.
 
 run_update() {
   local name="$1"
-  local instance_dir="$HOME/.claudify-$name"
+  local instance_dir="$HOME/.desky-$name"
   if [[ ! -d "$instance_dir" ]]; then
     echo "Instance '$name' not found at $instance_dir — skipping."
     return 0
