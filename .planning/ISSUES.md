@@ -25,6 +25,27 @@ Enhancements discovered during execution. Not critical - address in future phase
   `lib/` headers, CLAUDE.md, AGENTS.md), or Phase 4 (Container Isolation, when
   real isolation lands and the comments become true).
 
+### ISS-002: Stale manifest.bats + memory.bats tests (old nested layout)
+
+- **Discovered:** Phase 1 verification (2026-05-27, Station11 bats run)
+- **Type:** Testing
+- **Description:** 13 of 61 bats tests fail — `manifest.bats` (init_registry,
+  register/unregister/preserve, init_instance, set_channel) and parts of
+  `memory.bats` (manifest_set_skill, memory_assert_write/read). Root cause is NOT
+  the rebrand: they set `DESKY_ROOT="$TEST_HOME/.desky"` and expect a nested
+  `$DESKY_ROOT/instances.json` + `$DESKY_ROOT/desky.json`, plus
+  `.service == "claude-telegram"` — all from the pre-ADR-0006 single-instance,
+  nested layout. Current `manifest.sh` uses the flat `~/.desky-registry.json` +
+  per-instance-dir layout, which `multi-instance.bats` (tests 39-42) covers
+  correctly and which all pass. **Proven pre-existing:** running the suite at the
+  pre-rename baseline commit `e921982` produces the identical 13 failures.
+- **Impact:** Low (stale tests; the live code paths are correctly covered by
+  multi-instance.bats and pass). Misleading red in CI until rewritten.
+- **Effort:** Medium (rewrite both files to the flat layout + current service
+  name + MANIFEST_VERSION=2)
+- **Suggested phase:** Phase 2 (Migration touches manifest.sh — natural place to
+  refresh its tests) or a dedicated test-hygiene pass.
+
 ## Closed Enhancements
 
 [Moved here when addressed]

@@ -12,8 +12,8 @@ Detailed Phase-1 source: planning-me/PROJECT-PLAN.md
 
 Phase: 1 of 9 (Rebrand)
 Plan: 3 of 3 in current phase
-Status: Phase complete (pending Station11 bats/shellcheck round-trip)
-Last activity: 2026-05-27 — Completed 01-03-PLAN.md (README rewrite); Phase 1 done
+Status: Phase complete — Station11 bats round-trip done (rename proven non-breaking)
+Last activity: 2026-05-27 — Verified on Station11: identical pass/fail vs baseline e921982; rename breaks nothing
 
 Progress: ██░░░░░░░░ 15% (3/20 plans)
 
@@ -54,6 +54,7 @@ Several are "Pending" — deferred to the relevant phase's planning step:
 ### Deferred Issues
 
 - **ISS-001** (.planning/ISSUES.md): `lib/layout.sh` + `lib/service.sh` header comments overclaim mount-namespace isolation the unit body excludes. Reconcile in Phase 3 (docs sync) or Phase 4 (when real isolation lands).
+- **ISS-002** (.planning/ISSUES.md): `manifest.bats` + `memory.bats` — 13 stale tests assuming the pre-ADR-0006 nested layout; fail identically at baseline `e921982` (NOT caused by rebrand). `multi-instance.bats` covers the flat layout correctly and passes. Rewrite in Phase 2 (migration touches manifest.sh) or a test-hygiene pass.
 
 ### Pending Todos
 
