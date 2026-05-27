@@ -11,11 +11,11 @@ Detailed Phase-1 source: planning-me/PROJECT-PLAN.md
 ## Current Position
 
 Phase: 1 of 9 (Rebrand)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-05-27 — Completed 01-02-PLAN.md (URLs→Desky, version 0.2.0-dev, blocklist; install URL 200)
+Plan: 3 of 3 in current phase
+Status: Phase complete (pending Station11 bats/shellcheck round-trip)
+Last activity: 2026-05-27 — Completed 01-03-PLAN.md (README rewrite); Phase 1 done
 
-Progress: █░░░░░░░░░ 10% (2/20 plans)
+Progress: ██░░░░░░░░ 15% (3/20 plans)
 
 ## Performance Metrics
 
@@ -53,7 +53,7 @@ Several are "Pending" — deferred to the relevant phase's planning step:
 
 ### Deferred Issues
 
-None yet.
+- **ISS-001** (.planning/ISSUES.md): `lib/layout.sh` + `lib/service.sh` header comments overclaim mount-namespace isolation the unit body excludes. Reconcile in Phase 3 (docs sync) or Phase 4 (when real isolation lands).
 
 ### Pending Todos
 
@@ -68,5 +68,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-05-27
-Stopped at: Completed 01-02-PLAN.md (Desky public identity); 01-03 (README) remains
+Stopped at: Phase 1 (Rebrand) complete — all 3 plans done; Station11 round-trip pending
 Resume file: None
