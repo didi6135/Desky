@@ -11,11 +11,11 @@ Detailed Phase-1 source: planning-me/PROJECT-PLAN.md
 ## Current Position
 
 Phase: 1 of 9 (Rebrand)
-Plan: Planned — 01-01, 01-02, 01-03 ready to execute
-Status: Ready to execute (`/gsd:execute-phase 1`)
-Last activity: 2026-05-27 — Phase 1 planned (3 plans); GitHub repo renamed Claudify→Desky (+ About/topics)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-05-27 — Completed 01-01-PLAN.md (internal code+test rename; dist rebuilt; suite pending Station11)
 
-Progress: ░░░░░░░░░░ 0% (0/20 plans)
+Progress: █░░░░░░░░░ 5% (1/20 plans)
 
 ## Performance Metrics
 
@@ -63,9 +63,10 @@ None yet.
 
 - **Carried-in risk:** mount-namespace isolation already failed against AppArmor on Ubuntu 24.04 (old 3.4.5). Container isolation (Phase 4) is the highest-risk item — spike early on Station11 before sinking hours.
 - **Doc discrepancy:** doctor check-count cited as both "34-check" and "28/28" — pin the real number at Phase 9 signoff.
+- **Pending Station11 round-trip (Phase 1):** bats suite + `shellcheck` could not run on the Windows dev host (no `bats`/`shellcheck`/`jq`). Local `bash -n` + `bash build.sh` are green for 01-01. Run the full suite on Station11 before marking Phase 1 done.
 
 ## Session Continuity
 
 Last session: 2026-05-27
-Stopped at: Roadmap + state initialized (9 phases, v1.0 milestone)
+Stopped at: Completed 01-01-PLAN.md (Desky internal rename)
 Resume file: None
