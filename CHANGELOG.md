@@ -11,6 +11,25 @@ fresh Unreleased block goes back on top.
 
 ## [Unreleased]
 
+### Changed
+
+- **Internal rename: Claudify → Desky across the code path (Phase 1, 01-01).**
+  Case-distinct token replace (`CLAUDIFY`/`Claudify`/`claudify` →
+  `DESKY`/`Desky`/`desky`) over `lib/`, `install.sh`, `uninstall.sh`,
+  `update.sh`, `doctor.sh`, `build.sh`, `src/package.json`, and the bash
+  test suite. This renames the per-instance directory (`~/.claudify-<name>/`
+  → `~/.desky-<name>/`), the registry (`~/.claudify-registry.json` →
+  `~/.desky-registry.json`), the systemd unit (`claudify-<name>.service` →
+  `desky-<name>.service`), the per-instance manifest filename
+  (`claudify.json` → `desky.json`) and its version key (`.claudify_version`
+  → `.desky_version`), env-var prefixes (`CLAUDIFY_*` → `DESKY_*`), the PATH
+  and persona markers, and `/tmp` install-log paths. `MANIFEST_VERSION`
+  bumped 1 → 2 for the manifest schema change. Claude Code engine identity
+  (`claude-code`, `CLAUDE_CONFIG_DIR`, `.claude.json`, `CLAUDE.md`, `claude
+  mcp`) is preserved byte-for-byte. Two intentional exceptions remain: the
+  `didi6135/Claudify` GitHub URL values (repointed in 01-02) and the
+  immutable `Claudify-e4a` bead issue IDs. `dist/install.sh` regenerated.
+
 ### Fixed
 
 - **Intermittent install crash between `start_service` and
