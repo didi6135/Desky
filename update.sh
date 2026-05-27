@@ -2,7 +2,7 @@
 # update.sh — refresh a Desky instance to the latest main branch, in place.
 #
 # Usage (on the target server):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/update.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/update.sh)
 #   bash <(curl -fsSL .../update.sh) --name client-a
 #   bash <(curl -fsSL .../update.sh) --all          # update every registered instance
 #   bash update.sh
@@ -62,23 +62,23 @@ if [[ ! -s "$REGISTRY" ]]; then
     echo "Detected pre-3.4.5 single-instance layout at ~/.desky/."
     echo "3.4.5 changes the layout to ~/.desky-<name>/ — migration is the"
     echo "job of 3.4.7 (not yet released). Until then, please uninstall first:"
-    echo "    bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/uninstall.sh) --yes"
+    echo "    bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/uninstall.sh) --yes"
     echo "Then reinstall:"
-    echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash"
+    echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash"
     exit 1
   fi
   echo "No Desky install found (no $REGISTRY)."
   echo
   echo "This script updates an existing install. For a first-time install, run:"
   echo
-  echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash"
+  echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash"
   echo
   exit 1
 fi
 
 # Cache-bust the dist URL — raw.githubusercontent.com has CDN edges
 # that sometimes serve a stale copy for minutes after a push.
-DIST_URL="https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh?t=$(date +%s)"
+DIST_URL="https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh?t=$(date +%s)"
 
 run_update() {
   local name="$1"

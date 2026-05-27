@@ -18,7 +18,7 @@ validate_instance_name() {
   local name="$1"
   [[ "$name" =~ ^[a-z][a-z0-9_-]{1,30}$ ]] || return 1
   case "$name" in
-    ls|cd|cp|mv|rm|cat|grep|find|git|npm|bun|node|claude|desky) return 1 ;;
+    ls|cd|cp|mv|rm|cat|grep|find|git|npm|bun|node|claude|claudify|desky) return 1 ;;
     docker|systemctl|journalctl|sudo|bash|sh|zsh|env|export|set)   return 1 ;;
     pwd|echo|test|true|false|kill|killall|ssh|scp|curl|wget)       return 1 ;;
     install|update|uninstall|doctor|backup|restore|build|help)     return 1 ;;

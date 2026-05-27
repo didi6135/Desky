@@ -25,7 +25,7 @@
 #                                     (Claudify-e4a — OMZ default() lesson)
 
 DESKY_PATH_MARKER='# Desky PATH —'
-DESKY_RAW_BASE='https://raw.githubusercontent.com/didi6135/Claudify/main'
+DESKY_RAW_BASE='https://raw.githubusercontent.com/didi6135/Desky/main'
 
 # personal_cmd_collision_check <name>
 #   Warn (don't fail) if invoking <name> in the operator's interactive shell

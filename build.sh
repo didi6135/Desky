@@ -54,13 +54,13 @@ mkdir -p "$OUT_DIR"
 # desky install.sh — bootstrap Claude Code + Telegram on this Linux server
 #
 # THIS FILE IS GENERATED. Do not edit directly.
-# Source:  https://github.com/didi6135/Claudify
+# Source:  https://github.com/didi6135/Desky
 # Edit:    install.sh + lib/*.sh in the source repo, then run \`bash build.sh\`
 # Built:   $(date -u +%Y-%m-%dT%H:%M:%SZ)
 #
 # Usage (on a target Linux server):
-#   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash -s -- --dry-run
+#   curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash -s -- --dry-run
 
 set -euo pipefail
 

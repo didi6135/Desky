@@ -2,7 +2,7 @@
 # desky install.sh — bootstrap Claude Code + Telegram on this Linux server
 #
 # Usage (target server, after SSH'ing in):
-#   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash
 #   curl -fsSL .../install.sh | bash -s -- --name client-a       # named instance
 #   curl -fsSL .../install.sh | bash -s -- --dry-run
 #   BOT_TOKEN=… TG_USER_ID=… INSTANCE_NAME=… bash install.sh
@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-SCRIPT_VERSION="0.1.0-dev"
+SCRIPT_VERSION="0.2.0-dev"
 
 # Resolve LIB_DIR even when invoked via symlink.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

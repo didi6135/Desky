@@ -276,5 +276,5 @@ if [[ "$linger" == "yes" ]]; then
 fi
 echo
 echo "  To reinstall later:"
-echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash"
+echo "    curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash"
 echo

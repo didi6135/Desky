@@ -2,7 +2,7 @@
 # doctor.sh — diagnose a Desky install on the server it runs on.
 #
 # Usage (from the target server):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/doctor.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/doctor.sh)
 #   bash doctor.sh                       (default: pick from registry / default)
 #   bash doctor.sh --name client-a       (named instance)
 #   bash doctor.sh --all                 (every registered instance)
