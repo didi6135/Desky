@@ -69,6 +69,10 @@ If isolation and durability fail, nothing else matters — that sentence is the 
 
 ## Context
 
+- **Detailed Phase-1 source plan: `planning-me/PROJECT-PLAN.md`.** The full sub-phase
+  breakdown (per-phase deliverables, dependency DAG, risks, steal/skip specifics,
+  Phase 2–5 horizon). **`/gsd:create-roadmap` and `/gsd:plan-phase` MUST read this file**
+  — it holds the execution detail PROJECT.md intentionally distills out.
 - **Brownfield.** Inherits the Claudify codebase: engine-agnostic Bash installer + focused `lib/*.sh` modules + a single Claude Code engine adapter, distributed as one built `dist/install.sh`. Codebase map lives in `.planning/codebase/`.
 - **Reference mining.** Ideas sourced from three sibling agents in the parent folder — steal the *pattern*, skip the *runtime*:
   - **nanoclaw** → container-per-agent (Dockerfile, seccomp, entrypoint, volume strategy)
