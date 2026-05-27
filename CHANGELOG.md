@@ -30,6 +30,15 @@ fresh Unreleased block goes back on top.
   `didi6135/Claudify` GitHub URL values (repointed in 01-02) and the
   immutable `Claudify-e4a` bead issue IDs. `dist/install.sh` regenerated.
 
+- **Public identity switched to Desky (Phase 1, 01-02).** GitHub repository
+  renamed `didi6135/Claudify` → `didi6135/Desky` (old name auto-redirects). All
+  install/raw/dist URLs in `install.sh`, `update.sh`, `uninstall.sh`,
+  `doctor.sh`, `build.sh`, and the `DESKY_RAW_BASE` wrapper value now point at
+  `didi6135/Desky`. `SCRIPT_VERSION` bumped `0.1.0-dev` → `0.2.0-dev`.
+  `validate_instance_name` now rejects `claude`, `claudify`, and `desky` as
+  instance names (a migrating operator can't reuse either brand). The curl
+  one-liner installs Desky end to end. `dist/install.sh` regenerated.
+
 ### Fixed
 
 - **Intermittent install crash between `start_service` and

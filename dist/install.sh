@@ -2,17 +2,17 @@
 # desky install.sh — bootstrap Claude Code + Telegram on this Linux server
 #
 # THIS FILE IS GENERATED. Do not edit directly.
-# Source:  https://github.com/didi6135/Claudify
+# Source:  https://github.com/didi6135/Desky
 # Edit:    install.sh + lib/*.sh in the source repo, then run `bash build.sh`
-# Built:   2026-05-27T13:36:19Z
+# Built:   2026-05-27T13:39:55Z
 #
 # Usage (on a target Linux server):
-#   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash -s -- --dry-run
+#   curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash -s -- --dry-run
 
 set -euo pipefail
 
-SCRIPT_VERSION="0.1.0-dev"
+SCRIPT_VERSION="0.2.0-dev"
 
 # ─── from lib/ui.sh ─────────────────────────────────────────────────
 # lib/ui.sh — output helpers, log file setup
@@ -156,7 +156,7 @@ validate_instance_name() {
   local name="$1"
   [[ "$name" =~ ^[a-z][a-z0-9_-]{1,30}$ ]] || return 1
   case "$name" in
-    ls|cd|cp|mv|rm|cat|grep|find|git|npm|bun|node|claude|desky) return 1 ;;
+    ls|cd|cp|mv|rm|cat|grep|find|git|npm|bun|node|claude|claudify|desky) return 1 ;;
     docker|systemctl|journalctl|sudo|bash|sh|zsh|env|export|set)   return 1 ;;
     pwd|echo|test|true|false|kill|killall|ssh|scp|curl|wget)       return 1 ;;
     install|update|uninstall|doctor|backup|restore|build|help)     return 1 ;;
@@ -1242,7 +1242,7 @@ manifest_read_field() {
 #                                     (Claudify-e4a — OMZ default() lesson)
 
 DESKY_PATH_MARKER='# Desky PATH —'
-DESKY_RAW_BASE='https://raw.githubusercontent.com/didi6135/Claudify/main'
+DESKY_RAW_BASE='https://raw.githubusercontent.com/didi6135/Desky/main'
 
 # personal_cmd_collision_check <name>
 #   Warn (don't fail) if invoking <name> in the operator's interactive shell
