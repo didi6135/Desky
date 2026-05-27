@@ -1,11 +1,13 @@
-# Claudify
+# Desky
 
-> **A personal assistant powered by your own Claude Code subscription.**
-> **Deploy once, reach it from anywhere.**
+> **A self-hosted personal AI assistant for your own Linux server.**
+> **Deploy once, reach it from Telegram — powered by your Claude Code subscription.**
 
-Claudify takes a fresh Linux server and turns it into a personal Claude
-Code assistant you can talk to from Telegram. One curl command, one
-sudo prompt, one browser login — that's the whole setup.
+Desky takes a fresh Linux server and turns it into a personal AI
+assistant you talk to from Telegram. One curl command, one sudo prompt,
+one browser login — that's the whole setup. Run a single instance for
+yourself, or name several on the same box (one per client, project, or
+team) — each is fully self-contained.
 
 ---
 
@@ -14,18 +16,26 @@ sudo prompt, one browser login — that's the whole setup.
 SSH into your server, then:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash
 ```
 
 The installer walks you through everything: creating a Telegram bot,
 installing Claude Code, configuring the systemd service, completing
 Claude OAuth. **First install takes about 3–5 minutes.**
 
+By default the instance is named after your Linux user (so `whoami`
+returning `david` gives you a `david` command and a `~/.desky-david/`
+folder). To run more than one instance on the same host, name them:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash -s -- --name client-a
+```
+
 **Safe to Ctrl-C anytime.** If you stop mid-install (network drop,
-second thoughts, anything), just re-run the same curl command. Each
-input you've already typed (bot token, Telegram user ID, workspace
-name) is saved to `~/.claudify/.install-partial` (chmod 600)
-progressively as you go. On re-run you get a quick prompt:
+second thoughts, anything), just re-run the same command. Each input
+you've already typed (bot token, Telegram user ID) is saved to
+`~/.desky-<name>/.install-partial` (chmod 600) progressively as you go.
+On re-run you get a quick prompt:
 
 ```
   Found saved progress from a previous install attempt:
@@ -34,15 +44,15 @@ progressively as you go. On re-run you get a quick prompt:
 ```
 
 Press ENTER (or type `y`) to continue from where you stopped — the
-installer skips any prompts you'd already answered and only asks
-about the inputs that are still missing. Type `n` and the saved
-progress is wiped and you start fresh. The partial-state file is also
-removed automatically on a successful finish.
+installer skips the prompts you'd already answered and only asks about
+inputs that are still missing. Type `n` and the saved progress is wiped
+and you start fresh. The partial-state file is also removed
+automatically on a successful finish.
 
 ### Preview without changing anything
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/dist/install.sh | bash -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash -s -- --dry-run
 ```
 
 Shows every action the installer would take, without doing any of them.
@@ -69,62 +79,112 @@ Full prerequisites: [docs/prerequisites.md](docs/prerequisites.md).
 
 ## After install
 
-The bot runs as `claude-telegram.service` under your user systemd:
+Each instance installs a **personal command** at `~/.local/bin/<name>`
+— the short, ergonomic way to manage it. For an instance named `david`:
 
 ```bash
-systemctl --user status  claude-telegram      # is it running?
-journalctl --user -u     claude-telegram -f   # follow logs
-systemctl --user restart claude-telegram      # restart
-systemctl --user stop    claude-telegram      # stop
+david status      # is the service running?
+david logs        # follow the logs
+david restart     # restart the service
+david start       # start it
+david stop        # stop it
+david doctor      # run health checks
+david update      # pull the latest Desky and refresh in place
+david uninstall   # remove this instance entirely
+david --help      # full subcommand list
+```
+
+(If `david: command not found` right after install, open a new terminal
+or run `source ~/.bashrc` to pick up the new `~/.local/bin` PATH entry.)
+
+Under the hood each instance is a user systemd service named
+`desky-<name>.service`, so the raw commands work too as a fallback:
+
+```bash
+systemctl --user status  desky-david      # is it running?
+journalctl --user -u     desky-david -f   # follow logs
+systemctl --user restart desky-david      # restart
+systemctl --user stop    desky-david      # stop
 ```
 
 ### Everything lives here
 
-All per-install state is under a single hidden folder:
+All of an instance's state is under a single hidden, self-contained
+folder named after the instance:
+
 ```
-~/.claudify/
-├── workspace/           claude's WorkingDirectory
-├── credentials.env      Claude OAuth token (chmod 600)
-└── telegram/            TELEGRAM_STATE_DIR
-    ├── .env             bot token (chmod 600)
-    └── access.json      user allowlist
+~/.desky-<name>/
+├── workspace/            the agent's working directory (persona at workspace/CLAUDE.md)
+├── channels/telegram/    Telegram state (TELEGRAM_STATE_DIR)
+│   ├── .env              bot token (chmod 600)
+│   └── access.json       user allowlist
+├── mcps/                 MCP servers
+├── skills/               installed skills
+├── hooks/                lifecycle hooks
+├── data/                 persistent app data
+├── claude/               engine config dir (CLAUDE_CONFIG_DIR — per-instance)
+├── credentials.env       Claude OAuth token (chmod 600)
+└── desky.json            this instance's manifest (versions, what's installed)
+
+~/.desky-registry.json    side-car: every Desky instance on this host
 ```
-To uninstall everything Claudify installed:
+
+Run several instances and each gets its own `~/.desky-<name>/` tree, its
+own `desky-<name>.service`, and its own `<name>` command — no shared
+state between them.
+
+**A note on isolation.** The service runs with systemd Tier-1 hardening
+(`NoNewPrivileges`, `RestrictNamespaces`, `RestrictSUIDSGID`,
+`LockPersonality`, plus `MemoryMax` / `TasksMax` resource caps) that
+protects the host from a misbehaving bot — fork-bombs, memory
+exhaustion, privilege escalation. This is host protection, **not**
+cross-instance filesystem isolation: instances on the same box share the
+filesystem today. Container-based isolation is on the roadmap.
+
+To remove a single instance:
+
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/uninstall.sh)
+david uninstall
+# fallback: bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/uninstall.sh) --name david
 ```
-(One script, prompts for confirmation, leaves Claude Code itself + Bun + npm
-alone — you can remove those manually if you want a completely clean system.)
+
+(Prompts for confirmation, leaves Claude Code itself + Bun + npm alone —
+remove those manually if you want a completely clean system.)
 
 ## Diagnose (doctor)
 
-When something looks off, run:
+When something looks off:
+
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/doctor.sh)
+david doctor
+# fallback: bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/doctor.sh) --name david
 ```
 
-It prints 28 health checks (deps, layout, auth, systemd, Telegram
-reachability) and gives a concrete next-step hint on every failure.
+It runs a battery of health checks (deps, layout, auth, systemd,
+Telegram reachability) and gives a concrete next-step hint on every
+failure.
 
 ---
 
 ## Update
 
-Pulls latest Claudify from main and re-runs in-place, preserving your
+Pulls the latest Desky from main and re-runs in place, preserving your
 bot token, allowlist, and OAuth credentials. Typically ~10 seconds.
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Claudify/main/update.sh)
+david update
+# fallback: bash <(curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/update.sh) --name david
 ```
 
-What survives: `BOT_TOKEN`, `TG_USER_ID` allowlist, Claude OAuth token,
-your edits to `~/.claudify/workspace/CLAUDE.md`.
-What changes: the systemd unit, claude CLI / plugin (if newer is out),
-`~/.claude.json` seed (idempotent), service restart.
+What survives: `BOT_TOKEN`, the Telegram user-ID allowlist, your Claude
+OAuth token, and your edits to `~/.desky-<name>/workspace/CLAUDE.md`.
+What changes: the systemd unit, the Claude CLI / plugin (if newer is
+out), the engine config seed (idempotent), and a service restart.
 
-To overwrite tokens on purpose:
+To overwrite tokens on purpose, re-install with `--reset-config`:
+
 ```bash
-curl -fsSL .../install.sh | bash -s -- --reset-config
+curl -fsSL https://raw.githubusercontent.com/didi6135/Desky/main/dist/install.sh | bash -s -- --name david --reset-config
 ```
 
 ---
@@ -173,8 +233,7 @@ bash test.sh --bash          # bash only (bats)
 bash test.sh --ts            # TS only (bun test)
 ```
 
-Conventions: [.planning/conventions.md](.planning/conventions.md).
-Architectural decisions: [.planning/decisions/](.planning/decisions/).
+Conventions: [.planning/codebase/CONVENTIONS.md](.planning/codebase/CONVENTIONS.md).
 
 ---
 
