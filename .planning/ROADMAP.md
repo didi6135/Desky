@@ -57,7 +57,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01: Internal code + test rename (paths, service, registry, manifest filename + version key, markers, log paths, brand strings) → rebuild dist → green; preserve Claude Code engine identity
-- [ ] 01-02: Public identity — GitHub repo rename (`didi6135/Claudify` → `didi6135/Desky`) + install/raw URLs + `SCRIPT_VERSION` bump + `validate_instance_name` blocklist
+- [x] 01-02: Public identity — GitHub repo rename (`didi6135/Claudify` → `didi6135/Desky`) + install/raw URLs + `SCRIPT_VERSION` bump + `validate_instance_name` blocklist
 - [ ] 01-03: README accurate refresh (Desky brand + real multi-instance layout + `didi6135/Desky` URLs); deep docs rewrite stays in Phase 3
 
 > Host migration helper moved to **Phase 2** — its `lib/migrate.sh` (02-01) already covers Claudify→Desky *and* pre-3.4.5 installs, so building a one-shot helper here would duplicate it (nothing ships to users before Phase 9, so there's no orphaned-install window).
@@ -166,7 +166,7 @@ Critical path: 1 → 4 → 5 → 9.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Rebrand | v1.0 | 1/3 | In progress | - |
+| 1. Rebrand | v1.0 | 2/3 | In progress | - |
 | 2. Migration | v1.0 | 0/2 | Not started | - |
 | 3. Docs Sync | v1.0 | 0/2 | Not started | - |
 | 4. Container Isolation | v1.0 | 0/4 | Not started | - |

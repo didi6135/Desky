@@ -11,11 +11,11 @@ Detailed Phase-1 source: planning-me/PROJECT-PLAN.md
 ## Current Position
 
 Phase: 1 of 9 (Rebrand)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-05-27 — Completed 01-01-PLAN.md (internal code+test rename; dist rebuilt; suite pending Station11)
+Last activity: 2026-05-27 — Completed 01-02-PLAN.md (URLs→Desky, version 0.2.0-dev, blocklist; install URL 200)
 
-Progress: █░░░░░░░░░ 5% (1/20 plans)
+Progress: █░░░░░░░░░ 10% (2/20 plans)
 
 ## Performance Metrics
 
@@ -68,5 +68,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-05-27
-Stopped at: Completed 01-01-PLAN.md (Desky internal rename)
+Stopped at: Completed 01-02-PLAN.md (Desky public identity); 01-03 (README) remains
 Resume file: None
