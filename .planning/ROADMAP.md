@@ -56,9 +56,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 
 Plans:
-- [ ] 01-01: Layout/service/registry rename (`~/.claudify-<name>/` → `~/.desky-<name>/`, `claudify-<name>.service` → `desky-<name>.service`, registry file)
-- [ ] 01-02: Strings, banners, `SCRIPT_VERSION`, install URLs, `validate_instance_name` blocklist; GitHub repo rename
-- [ ] 01-03: One-shot host migration helper (detect `~/.claudify-*/`, offer rename + rewrite systemd unit)
+- [ ] 01-01: Internal code + test rename (paths, service, registry, manifest filename + version key, markers, log paths, brand strings) → rebuild dist → green; preserve Claude Code engine identity
+- [ ] 01-02: Public identity — GitHub repo rename (`didi6135/Claudify` → `didi6135/Desky`) + install/raw URLs + `SCRIPT_VERSION` bump + `validate_instance_name` blocklist
+- [ ] 01-03: README accurate refresh (Desky brand + real multi-instance layout + `didi6135/Desky` URLs); deep docs rewrite stays in Phase 3
+
+> Host migration helper moved to **Phase 2** — its `lib/migrate.sh` (02-01) already covers Claudify→Desky *and* pre-3.4.5 installs, so building a one-shot helper here would duplicate it (nothing ships to users before Phase 9, so there's no orphaned-install window).
 
 ### Phase 2: Migration
 **Goal**: Any old install migrates itself to the Desky multi-instance layout on `desky update` — handling both pre-3.4.5 `~/.claudify/` and 3.4.5+ `~/.claudify-*/`.
@@ -77,7 +79,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 03-01: README rewrite (install one-liner, multi-instance examples, wrapper UX, Hebrew note)
+- [ ] 03-01: README deep pass (base Desky rebrand done in 01-03; here: container model, Hebrew note, final polish) + repo-wide zero-stale-`claudify` gate sweeping `CLAUDE.md` / `AGENTS.md`
 - [ ] 03-02: `docs/architecture.md` (container model) + `docs/install-container.md` (after Phase 4) + `docs/troubleshooting.md`
 
 ### Phase 4: Container Isolation

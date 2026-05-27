@@ -11,9 +11,9 @@ Detailed Phase-1 source: planning-me/PROJECT-PLAN.md
 ## Current Position
 
 Phase: 1 of 9 (Rebrand)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-27 — Roadmap created (v1.0 "Good & Secure Base", 9 phases)
+Plan: Planned — 01-01, 01-02, 01-03 ready to execute
+Status: Ready to execute (`/gsd:execute-phase 1`)
+Last activity: 2026-05-27 — Phase 1 planned (3 plans); GitHub repo renamed Claudify→Desky (+ About/topics)
 
 Progress: ░░░░░░░░░░ 0% (0/20 plans)
 
@@ -44,6 +44,12 @@ Several are "Pending" — deferred to the relevant phase's planning step:
 - Backup encryption (`age` lean) — decide in Phase 5
 - Memory = free-form text + FTS5 (no embeddings in P1) — set
 - Routines per-instance — set
+
+**Phase 1 planning (2026-05-27):**
+- GitHub repo renamed `didi6135/Claudify` → `didi6135/Desky`; About + 15 SEO topics set. Old name auto-redirects.
+- Host migration helper deferred to Phase 2 (its `lib/migrate.sh` absorbs Claudify→Desky); no user-facing window before Phase 9, so no duplication.
+- README base rebrand pulled into Phase 1 as 01-03 (repo is already public as Desky); deep docs rewrite + zero-stale-`claudify` gate stay in Phase 3.
+- Rename rule: case-respecting token replace; preserve Claude Code engine identity (`claude-code`, `CLAUDE_CONFIG_DIR`, `CLAUDE.md`); exclude `Claudify-<id>` bead IDs and `didi6135/Claudify` URL values (01-02 handles URLs).
 
 ### Deferred Issues
 
